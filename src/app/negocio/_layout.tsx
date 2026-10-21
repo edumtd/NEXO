@@ -7,7 +7,8 @@ import { BUSINESS_HIDDEN_ROUTES, BUSINESS_LINKS, useIsWideWeb, useTabBarOptions 
 
 export default function NegocioLayout() {
   const { session } = useApp();
-  const { profile } = useCurrentBusiness();
+  const { profile, notifications } = useCurrentBusiness();
+  const unread = notifications.filter((n) => !n.read).length;
   const tabBarOptions = useTabBarOptions();
   const wide = useIsWideWeb();
   if (!session) return <Redirect href="/" />;
@@ -18,7 +19,14 @@ export default function NegocioLayout() {
       screenOptions={tabBarOptions}
       tabBar={
         wide
-          ? () => <SideNav links={BUSINESS_LINKS} title={profile?.name ?? "Mi negocio"} subtitle="Negocio" />
+          ? () => (
+              <SideNav
+                links={BUSINESS_LINKS}
+                title={profile?.name ?? "Mi negocio"}
+                subtitle="Negocio"
+                counts={{ notificaciones: unread }}
+              />
+            )
           : undefined
       }
     >

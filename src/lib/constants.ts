@@ -10,6 +10,7 @@ import type {
   ServiceModality,
   ServiceOfferStatus,
   ServiceRequestStatus,
+  ServiceUpdateKind,
   VacancyStatus,
 } from "@/types";
 
@@ -108,8 +109,24 @@ export const SERVICE_OFFER_STATUS_LABELS: Record<ServiceOfferStatus, string> = {
 export const SERVICE_REQUEST_STATUS_LABELS: Record<ServiceRequestStatus, string> = {
   enviada: "Enviada",
   aceptada: "Aceptada",
+  en_proceso: "En proceso",
+  entregada: "Entregada",
+  completada: "Finalizada",
   rechazada: "Rechazada",
-  completada: "Completada",
+  cancelada: "Cancelada",
+};
+
+/** Estados en los que el negocio puede ver el correo del prestador. */
+export const SERVICE_CONTACT_VISIBLE: ServiceRequestStatus[] = ["aceptada", "en_proceso", "entregada", "completada"];
+
+/** Estados de una solicitud que aún sigue abierta (bloquean enviar otra al mismo servicio). */
+export const SERVICE_REQUEST_OPEN: ServiceRequestStatus[] = ["enviada", "aceptada", "en_proceso", "entregada"];
+
+export const SERVICE_UPDATE_KIND_LABELS: Record<ServiceUpdateKind, string> = {
+  avance: "Avance",
+  ajuste: "Ajustes solicitados",
+  cambio_fecha: "Cambio de fecha estimada",
+  entrega: "Entrega",
 };
 
 /** Franjas para filtrar por hora de inicio del turno. */

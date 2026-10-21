@@ -21,7 +21,7 @@ import { AcademicStatusBadge, ServiceRequestStatusBadge } from "@/components/Sta
 import { Avatar, Button, Card, EmptyState, Input } from "@/components/ui";
 import { useMarketplaceOffers } from "@/hooks/useServiceOffers";
 import { useBusinessServiceRequests } from "@/hooks/useServiceRequests";
-import { SERVICE_CATEGORY_LABELS } from "@/lib/constants";
+import { SERVICE_CATEGORY_LABELS, SERVICE_REQUEST_OPEN } from "@/lib/constants";
 import { serviceRequestSchema, type ServiceRequestValues } from "@/lib/schemas";
 import { useApp } from "@/store/AppStore";
 import { colors } from "@/theme/colors";
@@ -30,7 +30,7 @@ export default function TalentoDetalle() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const item = useMarketplaceOffers().find((i) => i.offer.id === id);
   const openRequest = useBusinessServiceRequests().find(
-    (r) => r.offer.id === id && (r.request.status === "enviada" || r.request.status === "aceptada")
+    (r) => r.offer.id === id && SERVICE_REQUEST_OPEN.includes(r.request.status)
   );
 
   if (!item) {
@@ -120,11 +120,11 @@ export default function TalentoDetalle() {
             <ServiceRequestStatusBadge status={openRequest.request.status} />
           </View>
           <Pressable
-            onPress={() => router.push({ pathname: "/negocio/postulaciones", params: { tipo: "servicios" } })}
+            onPress={() => router.push(`/negocio/solicitud/${openRequest.request.id}`)}
             accessibilityRole="link"
             className="mt-2 self-start"
           >
-            <Text className="text-sm font-bold text-coral">Ver mis solicitudes</Text>
+            <Text className="text-sm font-bold text-coral">Ver seguimiento</Text>
           </Pressable>
         </View>
       ) : (

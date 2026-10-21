@@ -1,17 +1,17 @@
 import { router } from "expo-router";
-import { Check, Inbox, Mail, Pause, Pencil, Play, Plus, Sparkles, X } from "lucide-react-native";
-import { useState } from "react";
+import { ChevronRight, Inbox, Pause, Pencil, Play, Plus, Sparkles } from "lucide-react-native";
 import { Pressable, Text, View } from "react-native";
 
 import { BusinessIcon } from "@/components/BusinessIcon";
 import { Screen, SectionTitle } from "@/components/Screen";
 import { formatModality, formatRate } from "@/components/ServiceCard";
+import { ServiceProgress } from "@/components/ServiceProgress";
 import { ServiceOfferStatusBadge, ServiceRequestStatusBadge } from "@/components/StatusBadges";
 import { Button, Card, EmptyState } from "@/components/ui";
 import { useMyServiceOffers } from "@/hooks/useServiceOffers";
 import { useStudentServiceRequests, type StudentRequestItem } from "@/hooks/useServiceRequests";
 import { SERVICE_CATEGORY_LABELS } from "@/lib/constants";
-import { formatDate, formatDays, formatRange } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import { useApp } from "@/store/AppStore";
 import { colors } from "@/theme/colors";
 import type { ServiceOffer } from "@/types";
@@ -119,20 +119,11 @@ function OfferCard({ offer }: { offer: ServiceOffer }) {
   );
 }
 
+/** Tarjeta resumida: las acciones viven en el detalle (sin botones anidados dentro de un Card presionable). */
 function RequestCard({ item }: { item: StudentRequestItem }) {
-  const { respondServiceRequest } = useApp();
-  const [pending, setPending] = useState<"aceptada" | "rechazada" | null>(null);
   const { request: r, offer, business } = item;
-  const showContact = r.status === "aceptada" || r.status === "completada";
-
-  const respond = async (status: "aceptada" | "rechazada") => {
-    setPending(status);
-    await respondServiceRequest(r.id, status);
-    setPending(null);
-  };
-
   return (
-    <Card>
+    <Card onPress={() => router.push(`/estudiante/solicitud/${r.id}`)} accessibilityLabel={`Solicitud de ${business?.name ?? "negocio"} para ${offer.title}`}>
       <View className="flex-row items-center gap-3">
         <BusinessIcon category={business?.category ?? "comercio"} />
         <View className="flex-1">
@@ -146,48 +137,21 @@ function RequestCard({ item }: { item: StudentRequestItem }) {
         <ServiceRequestStatusBadge status={r.status} />
       </View>
 
-      <Text className="mt-3 text-sm leading-5 text-ink">“{r.message}”</Text>
-      {r.days?.length && r.start !== undefined && r.end !== undefined ? (
-        <Text className="mt-2 text-sm font-semibold text-navy">
-          Horario propuesto: {formatDays(r.days)} · {formatRange(r.start, r.end)}
-        </Text>
-      ) : (
-        <Text className="mt-2 text-sm text-ink-muted">Trabajo remoto, sin horario fijo.</Text>
-      )}
-      {showContact && business?.contactEmail ? (
-        <View className="mt-2 flex-row items-center gap-2">
-          <Mail size={15} color={colors.muted} />
-          <Text className="text-sm text-ink">{business.contactEmail}</Text>
+      <Text className="mt-3 text-sm leading-5 text-ink" numberOfLines={2}>
+        “{r.message}”
+      </Text>
+      <View className="mt-3">
+        <ServiceProgress request={r} compact />
+      </View>
+      <View className="mt-3 flex-row items-center justify-between">
+        <Text className="text-xs text-ink-soft">Recibida el {formatDate(r.createdAt)}</Text>
+        <View className="flex-row items-center">
+          <Text className="text-xs font-bold text-coral">
+            {r.status === "enviada" ? "Responder" : "Ver detalle"}
+          </Text>
+          <ChevronRight size={14} color={colors.coral} />
         </View>
-      ) : null}
-      <Text className="mt-2 text-xs text-ink-soft">Recibida el {formatDate(r.createdAt)}</Text>
-
-      {r.status === "enviada" && (
-        <View className="mt-3 flex-row gap-2">
-          <View className="flex-1">
-            <Button
-              title="Aceptar"
-              size="sm"
-              variant="secondary"
-              icon={Check}
-              loading={pending === "aceptada"}
-              disabled={pending !== null}
-              onPress={() => respond("aceptada")}
-            />
-          </View>
-          <View className="flex-1">
-            <Button
-              title="Rechazar"
-              size="sm"
-              variant="danger"
-              icon={X}
-              loading={pending === "rechazada"}
-              disabled={pending !== null}
-              onPress={() => respond("rechazada")}
-            />
-          </View>
-        </View>
-      )}
+      </View>
     </Card>
   );
 }

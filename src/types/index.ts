@@ -71,7 +71,26 @@ export type RatePeriod = "hora" | "proyecto";
 
 export type ServiceOfferStatus = "activo" | "pausado";
 
-export type ServiceRequestStatus = "enviada" | "aceptada" | "rechazada" | "completada";
+export type ServiceRequestStatus =
+  | "enviada"
+  | "aceptada"
+  | "en_proceso"
+  | "entregada"
+  | "completada"
+  | "rechazada"
+  | "cancelada";
+
+/** Bitácora estructurada de una solicitud (no es chat). "ajuste" lo escribe el negocio; el resto, el prestador. */
+export type ServiceUpdateKind = "avance" | "ajuste" | "cambio_fecha" | "entrega";
+
+export interface ServiceUpdate {
+  id: string;
+  requestId: string;
+  kind: ServiceUpdateKind;
+  message: string;
+  link?: string;
+  createdAt: string;
+}
 
 export interface ServiceOffer {
   id: string;
@@ -101,6 +120,10 @@ export interface ServiceRequest {
   start?: number;
   end?: number;
   status: ServiceRequestStatus;
+  /** Fecha estimada de entrega (AAAA-MM-DD); la fija el prestador al aceptar. */
+  estimatedDate?: string;
+  cancelReason?: string;
+  cancelledBy?: Role;
   createdAt: string;
   updatedAt: string;
 }
@@ -146,11 +169,16 @@ export interface Application {
   updatedAt: string;
 }
 
+export type NotificationKind = "postulacion" | "solicitud_servicio" | "sistema";
+
 export interface AppNotification {
   id: string;
   userId: string;
+  kind: NotificationKind;
   title: string;
   body: string;
+  /** Ruta interna a abrir al tocarla; siempre empieza con "/". */
+  link?: string;
   createdAt: string;
   read: boolean;
 }

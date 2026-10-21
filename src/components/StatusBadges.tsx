@@ -28,10 +28,13 @@ export function AcademicStatusBadge({ status }: { status: AcademicStatus }) {
 }
 
 const requestTone: Record<ServiceRequestStatus, BadgeTone> = {
-  enviada: "info",
-  aceptada: "success",
+  enviada: "neutral",
+  aceptada: "info",
+  en_proceso: "coral",
+  entregada: "warning",
+  completada: "success",
   rechazada: "danger",
-  completada: "neutral",
+  cancelada: "danger",
 };
 
 export function ServiceRequestStatusBadge({ status }: { status: ServiceRequestStatus }) {

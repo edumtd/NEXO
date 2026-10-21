@@ -2,6 +2,7 @@ import { router } from "expo-router";
 import { CalendarDays, ChevronRight, Inbox, Plus, Settings, ShieldAlert, Users, type LucideIcon } from "lucide-react-native";
 import { Pressable, Text, View } from "react-native";
 
+import { NotificationBell, NotificationsPanel, useNotificationsToggle } from "@/components/Notifications";
 import { Screen, SectionTitle } from "@/components/Screen";
 import { CompatibilityBadge } from "@/components/StatusBadges";
 import { Avatar, Card, EmptyState } from "@/components/ui";
@@ -10,8 +11,9 @@ import { useCurrentBusiness } from "@/store/AppStore";
 import { colors } from "@/theme/colors";
 
 export default function NegocioInicio() {
-  const { profile, vacancies } = useCurrentBusiness();
+  const { profile, vacancies, notifications } = useCurrentBusiness();
   const applicants = useBusinessApplicants();
+  const { open: showNotifications, toggle: toggleNotifications, unread } = useNotificationsToggle(notifications);
   if (!profile) return null;
 
   const active = vacancies.filter((v) => v.status === "activa").length;
@@ -23,16 +25,21 @@ export default function NegocioInicio() {
       eyebrow="Modo negocio"
       title={profile.name}
       right={
-        <Pressable
-          onPress={() => router.push("/negocio/perfil")}
-          accessibilityRole="button"
-          accessibilityLabel="Configuración del negocio"
-          className="h-10 w-10 items-center justify-center rounded-full bg-white/10 active:bg-white/20"
-        >
-          <Settings size={22} color={colors.white} />
-        </Pressable>
+        <View className="flex-row gap-2">
+          <NotificationBell unread={unread} onPress={toggleNotifications} size="md" />
+          <Pressable
+            onPress={() => router.push("/negocio/perfil")}
+            accessibilityRole="button"
+            accessibilityLabel="Configuración del negocio"
+            className="h-10 w-10 items-center justify-center rounded-full bg-white/10 active:bg-white/20"
+          >
+            <Settings size={22} color={colors.white} />
+          </Pressable>
+        </View>
       }
     >
+      {showNotifications && <NotificationsPanel notifications={notifications} allHref="/negocio/notificaciones" />}
+
       <Pressable
         onPress={() => router.push("/negocio/publicar-vacante")}
         accessibilityRole="button"

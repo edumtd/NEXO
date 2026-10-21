@@ -11,11 +11,12 @@ import {
   mockNotifications,
   mockServiceOffers,
   mockServiceRequests,
+  mockServiceUpdates,
   mockStudents,
   mockVacancies,
 } from "@/data/mock";
-import { APPLICATION_STATUS_LABELS } from "@/lib/constants";
-import { todayISO, uid } from "@/lib/format";
+import { APPLICATION_STATUS_LABELS, SERVICE_REQUEST_OPEN } from "@/lib/constants";
+import { formatDate, todayISO, uid } from "@/lib/format";
 import type {
   AcademicStatus,
   AppNotification,
@@ -27,6 +28,9 @@ import type {
   ServiceOffer,
   ServiceOfferStatus,
   ServiceRequest,
+  ServiceRequestStatus,
+  ServiceUpdate,
+  ServiceUpdateKind,
   Session,
   StudentProfile,
   Vacancy,
@@ -49,6 +53,61 @@ interface AppState {
   notifications: AppNotification[];
   serviceOffers: ServiceOffer[];
   serviceRequests: ServiceRequest[];
+  serviceUpdates: ServiceUpdate[];
+}
+
+interface TransitionSpec {
+  actor: Role;
+  from: ServiceRequestStatus[];
+  patch: Partial<ServiceRequest>;
+  update?: { kind: ServiceUpdateKind; message: string; link?: string };
+  notify: (names: { student: string; business: string; title: string }) => { title: string; body: string };
+}
+
+/**
+ * Aplica una transición del seguimiento de servicios si el usuario en sesión es la parte
+ * correcta y la solicitud está en un estado de origen válido. Registra la bitácora (si aplica)
+ * y notifica a la otra parte con enlace a su detalle. Misma regla que el trigger de Supabase.
+ */
+function applyServiceTransition(s: AppState, requestId: string, spec: TransitionSpec): AppState {
+  if (s.session?.role !== spec.actor) return s;
+  const request = s.serviceRequests.find((r) => r.id === requestId);
+  const offer = request && s.serviceOffers.find((o) => o.id === request.offerId);
+  if (!request || !offer || !spec.from.includes(request.status)) return s;
+  const isParty =
+    spec.actor === "estudiante" ? offer.studentId === s.session.userId : request.businessId === s.session.userId;
+  if (!isParty) return s;
+
+  const now = todayISO();
+  const names = {
+    student: s.students.find((st) => st.id === offer.studentId)?.fullName ?? "El prestador",
+    business: s.businesses.find((b) => b.id === request.businessId)?.name ?? "El negocio",
+    title: offer.title,
+  };
+  const { title, body } = spec.notify(names);
+  const toBusiness = spec.actor === "estudiante";
+  const notification: AppNotification = {
+    id: uid("n"),
+    userId: toBusiness ? request.businessId : offer.studentId,
+    kind: "solicitud_servicio",
+    link: toBusiness ? `/negocio/solicitud/${request.id}` : `/estudiante/solicitud/${request.id}`,
+    title,
+    body,
+    createdAt: now,
+    read: false,
+  };
+  const entry: ServiceUpdate | null = spec.update
+    ? { id: uid("su"), requestId: request.id, ...spec.update, createdAt: now }
+    : null;
+
+  return {
+    ...s,
+    serviceRequests: s.serviceRequests.map((r) =>
+      r.id === requestId ? { ...r, ...spec.patch, updatedAt: now } : r
+    ),
+    serviceUpdates: entry ? [...s.serviceUpdates, entry] : s.serviceUpdates,
+    notifications: [notification, ...s.notifications],
+  };
 }
 
 interface AppActions {
@@ -63,11 +122,20 @@ interface AppActions {
   setVacancyStatus: (id: string, status: VacancyStatus) => Promise<void>;
   setApplicationStatus: (id: string, status: ApplicationStatus) => Promise<void>;
   markNotificationsRead: () => void;
+  markNotificationRead: (id: string) => void;
   saveServiceOffer: (input: ServiceOfferInput, id?: string) => Promise<string>;
   setServiceOfferStatus: (id: string, status: ServiceOfferStatus) => Promise<void>;
   sendServiceRequest: (input: ServiceRequestInput) => Promise<void>;
-  respondServiceRequest: (id: string, status: "aceptada" | "rechazada") => Promise<void>;
-  completeServiceRequest: (id: string) => Promise<void>;
+  /** Aceptar exige fecha estimada de entrega (AAAA-MM-DD). */
+  respondServiceRequest: (id: string, status: "aceptada" | "rechazada", estimatedDate?: string) => Promise<void>;
+  startServiceRequest: (id: string) => Promise<void>;
+  addServiceProgress: (id: string, input: { message: string; link?: string }) => Promise<void>;
+  changeServiceEstimatedDate: (id: string, input: { estimatedDate: string; reason: string }) => Promise<void>;
+  deliverServiceRequest: (id: string, input: { message?: string; link?: string }) => Promise<void>;
+  confirmServiceCompletion: (id: string) => Promise<void>;
+  requestServiceAdjustments: (id: string, note: string) => Promise<void>;
+  /** Cualquiera de las dos partes, solo en estado enviada o aceptada. */
+  cancelServiceRequest: (id: string, reason: string) => Promise<void>;
 }
 
 type AppContextValue = AppState & AppActions;
@@ -85,6 +153,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     notifications: mockNotifications,
     serviceOffers: mockServiceOffers,
     serviceRequests: mockServiceRequests,
+    serviceUpdates: mockServiceUpdates,
   });
 
   const login = useCallback(async (role: Role, email: string) => {
@@ -168,16 +237,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const applyToVacancy = useCallback(async (vacancyId: string) => {
     await delay();
     setState((s) => {
-      const studentId = s.session?.userId;
-      if (!studentId) return s;
+      if (s.session?.role !== "estudiante") return s;
+      const studentId = s.session.userId;
       if (s.applications.some((a) => a.vacancyId === vacancyId && a.studentId === studentId)) return s;
+      const vacancy = s.vacancies.find((v) => v.id === vacancyId && v.status === "activa");
+      if (!vacancy) return s;
+      const student = s.students.find((st) => st.id === studentId);
       const now = todayISO();
+      // Solo nombre y vacante: nunca correo ni disponibilidad del estudiante.
+      const notification: AppNotification = {
+        id: uid("n"),
+        userId: vacancy.businessId,
+        kind: "postulacion",
+        link: `/negocio/postulaciones?vacancy=${vacancy.id}`,
+        title: "Nueva postulación",
+        body: `${student?.fullName ?? "Un estudiante"} se postuló a "${vacancy.title}".`,
+        createdAt: now,
+        read: false,
+      };
       return {
         ...s,
         applications: [
           ...s.applications,
           { id: uid("ap"), vacancyId, studentId, status: "recibida", createdAt: now, updatedAt: now },
         ],
+        notifications: [notification, ...s.notifications],
       };
     });
   }, []);
@@ -236,6 +320,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const notification: AppNotification = {
         id: uid("n"),
         userId: app.studentId,
+        kind: "postulacion",
+        link: `/estudiante/vacante/${vacancy.id}`,
         title: "Tu postulación cambió de estado",
         body: `${business?.name ?? "El negocio"} marcó tu postulación a "${vacancy.title}" como ${APPLICATION_STATUS_LABELS[status]}.`,
         createdAt: todayISO(),
@@ -256,6 +342,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...s,
       notifications: s.notifications.map((n) =>
         n.userId === s.session?.userId ? { ...n, read: true } : n
+      ),
+    }));
+  }, []);
+
+  const markNotificationRead = useCallback((id: string) => {
+    setState((s) => ({
+      ...s,
+      notifications: s.notifications.map((n) =>
+        n.id === id && n.userId === s.session?.userId ? { ...n, read: true } : n
       ),
     }));
   }, []);
@@ -303,16 +398,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!offer) return s;
       // Una sola solicitud abierta por servicio y negocio.
       const open = s.serviceRequests.some(
-        (r) =>
-          r.offerId === offer.id &&
-          r.businessId === businessId &&
-          (r.status === "enviada" || r.status === "aceptada")
+        (r) => r.offerId === offer.id && r.businessId === businessId && SERVICE_REQUEST_OPEN.includes(r.status)
       );
       if (open) return s;
       const now = todayISO();
       const business = s.businesses.find((b) => b.id === businessId);
+      const requestId = uid("sr");
       const request: ServiceRequest = {
-        id: uid("sr"),
+        id: requestId,
         offerId: offer.id,
         businessId,
         message: input.message,
@@ -324,6 +417,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const notification: AppNotification = {
         id: uid("n"),
         userId: offer.studentId,
+        kind: "solicitud_servicio",
+        link: `/estudiante/solicitud/${requestId}`,
         title: "Nueva solicitud de servicio",
         body: `${business?.name ?? "Un negocio"} te envió una solicitud para "${offer.title}".`,
         createdAt: now,
@@ -337,55 +432,127 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const respondServiceRequest = useCallback<AppActions["respondServiceRequest"]>(async (id, status) => {
+  const respondServiceRequest = useCallback<AppActions["respondServiceRequest"]>(async (id, status, estimatedDate) => {
+    await delay(200);
+    if (status === "aceptada" && !estimatedDate) return;
+    setState((s) =>
+      applyServiceTransition(s, id, {
+        actor: "estudiante",
+        from: ["enviada"],
+        patch: status === "aceptada" ? { status, estimatedDate } : { status },
+        notify: ({ student, title }) =>
+          status === "aceptada"
+            ? { title: "Solicitud aceptada", body: `${student} aceptó tu solicitud para "${title}". Entrega estimada: ${formatDate(estimatedDate!)}.` }
+            : { title: "Solicitud rechazada", body: `${student} rechazó tu solicitud para "${title}".` },
+      })
+    );
+  }, []);
+
+  const startServiceRequest = useCallback(async (id: string) => {
+    await delay(200);
+    setState((s) =>
+      applyServiceTransition(s, id, {
+        actor: "estudiante",
+        from: ["aceptada"],
+        patch: { status: "en_proceso" },
+        notify: ({ student, title }) => ({ title: "Trabajo iniciado", body: `${student} comenzó a trabajar en "${title}".` }),
+      })
+    );
+  }, []);
+
+  const addServiceProgress = useCallback<AppActions["addServiceProgress"]>(async (id, { message, link }) => {
+    await delay(200);
+    setState((s) =>
+      applyServiceTransition(s, id, {
+        actor: "estudiante",
+        from: ["en_proceso"],
+        patch: {},
+        update: { kind: "avance", message, link },
+        notify: ({ student, title }) => ({ title: "Nuevo avance", body: `${student} publicó un avance en "${title}".` }),
+      })
+    );
+  }, []);
+
+  const changeServiceEstimatedDate = useCallback<AppActions["changeServiceEstimatedDate"]>(
+    async (id, { estimatedDate, reason }) => {
+      await delay(200);
+      setState((s) =>
+        applyServiceTransition(s, id, {
+          actor: "estudiante",
+          from: ["en_proceso"],
+          patch: { estimatedDate },
+          update: { kind: "cambio_fecha", message: `Nueva fecha: ${formatDate(estimatedDate)}. ${reason}` },
+          notify: ({ student, title }) => ({
+            title: "Cambio de fecha estimada",
+            body: `${student} movió la entrega de "${title}" al ${formatDate(estimatedDate)}.`,
+          }),
+        })
+      );
+    },
+    []
+  );
+
+  const deliverServiceRequest = useCallback<AppActions["deliverServiceRequest"]>(async (id, { message, link }) => {
     await delay(200);
     setState((s) => {
-      if (s.session?.role !== "estudiante") return s;
-      const request = s.serviceRequests.find((r) => r.id === id);
-      const offer = request && s.serviceOffers.find((o) => o.id === request.offerId);
-      if (!request || !offer || offer.studentId !== s.session.userId || request.status !== "enviada") return s;
-      const student = s.students.find((st) => st.id === offer.studentId);
-      const now = todayISO();
-      const notification: AppNotification = {
-        id: uid("n"),
-        userId: request.businessId,
-        title: status === "aceptada" ? "Solicitud aceptada" : "Solicitud rechazada",
-        body: `${student?.fullName ?? "El estudiante"} ${status === "aceptada" ? "aceptó" : "rechazó"} tu solicitud para "${offer.title}".`,
-        createdAt: now,
-        read: false,
-      };
-      return {
-        ...s,
-        serviceRequests: s.serviceRequests.map((r) => (r.id === id ? { ...r, status, updatedAt: now } : r)),
-        notifications: [notification, ...s.notifications],
-      };
+      const offer = s.serviceOffers.find((o) => o.id === s.serviceRequests.find((r) => r.id === id)?.offerId);
+      // En servicios remotos la entrega exige una nota o un enlace.
+      if (offer?.modality === "remoto" && !message && !link) return s;
+      return applyServiceTransition(s, id, {
+        actor: "estudiante",
+        from: ["en_proceso"],
+        patch: { status: "entregada" },
+        update: { kind: "entrega", message: message || "Entrega registrada sin nota.", link },
+        notify: ({ student, title }) => ({
+          title: "Servicio entregado",
+          body: `${student} marcó como entregado "${title}". Revisa y confirma.`,
+        }),
+      });
     });
   }, []);
 
-  const completeServiceRequest = useCallback(async (id: string) => {
+  const confirmServiceCompletion = useCallback(async (id: string) => {
+    await delay(200);
+    setState((s) =>
+      applyServiceTransition(s, id, {
+        actor: "negocio",
+        from: ["entregada"],
+        patch: { status: "completada" },
+        notify: ({ business, title }) => ({
+          title: "Servicio finalizado",
+          body: `${business} confirmó como finalizado "${title}".`,
+        }),
+      })
+    );
+  }, []);
+
+  const requestServiceAdjustments = useCallback(async (id: string, note: string) => {
+    await delay(200);
+    setState((s) =>
+      applyServiceTransition(s, id, {
+        actor: "negocio",
+        from: ["entregada"],
+        patch: { status: "en_proceso" },
+        update: { kind: "ajuste", message: note },
+        notify: ({ business, title }) => ({ title: "Ajustes solicitados", body: `${business} pidió ajustes en "${title}".` }),
+      })
+    );
+  }, []);
+
+  const cancelServiceRequest = useCallback(async (id: string, reason: string) => {
     await delay(200);
     setState((s) => {
-      if (s.session?.role !== "negocio") return s;
-      const request = s.serviceRequests.find((r) => r.id === id);
-      const offer = request && s.serviceOffers.find((o) => o.id === request.offerId);
-      if (!request || !offer || request.businessId !== s.session.userId || request.status !== "aceptada") return s;
-      const business = s.businesses.find((b) => b.id === request.businessId);
-      const now = todayISO();
-      const notification: AppNotification = {
-        id: uid("n"),
-        userId: offer.studentId,
-        title: "Servicio completado",
-        body: `${business?.name ?? "El negocio"} marcó como completado "${offer.title}".`,
-        createdAt: now,
-        read: false,
-      };
-      return {
-        ...s,
-        serviceRequests: s.serviceRequests.map((r) =>
-          r.id === id ? { ...r, status: "completada", updatedAt: now } : r
-        ),
-        notifications: [notification, ...s.notifications],
-      };
+      const actor = s.session?.role;
+      if (!actor) return s;
+      return applyServiceTransition(s, id, {
+        actor,
+        from: ["enviada", "aceptada"],
+        patch: { status: "cancelada", cancelReason: reason, cancelledBy: actor },
+        notify: ({ student, business, title }) => ({
+          title: "Solicitud cancelada",
+          body: `${actor === "estudiante" ? student : business} canceló la solicitud de "${title}". Motivo: ${reason}`,
+        }),
+      });
     });
   }, []);
 
@@ -403,11 +570,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setVacancyStatus,
       setApplicationStatus,
       markNotificationsRead,
+      markNotificationRead,
       saveServiceOffer,
       setServiceOfferStatus,
       sendServiceRequest,
       respondServiceRequest,
-      completeServiceRequest,
+      startServiceRequest,
+      addServiceProgress,
+      changeServiceEstimatedDate,
+      deliverServiceRequest,
+      confirmServiceCompletion,
+      requestServiceAdjustments,
+      cancelServiceRequest,
     }),
     [
       state,
@@ -422,11 +596,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setVacancyStatus,
       setApplicationStatus,
       markNotificationsRead,
+      markNotificationRead,
       saveServiceOffer,
       setServiceOfferStatus,
       sendServiceRequest,
       respondServiceRequest,
-      completeServiceRequest,
+      startServiceRequest,
+      addServiceProgress,
+      changeServiceEstimatedDate,
+      deliverServiceRequest,
+      confirmServiceCompletion,
+      requestServiceAdjustments,
+      cancelServiceRequest,
     ]
   );
 
@@ -459,7 +640,7 @@ export function useCurrentStudent() {
  * si se postularon a alguna de sus vacantes (misma regla que la RLS).
  */
 export function useCurrentBusiness() {
-  const { session, businesses, vacancies, applications, students, availability } = useApp();
+  const { session, businesses, vacancies, applications, students, availability, notifications } = useApp();
   const id = session?.role === "negocio" ? session.userId : null;
   return useMemo(() => {
     const myVacancies = vacancies.filter((v) => v.businessId === id);
@@ -474,6 +655,7 @@ export function useCurrentBusiness() {
       /** Solo para calcular compatibilidad; la UI de negocio nunca muestra los bloques. */
       applicantAvailability: (studentId: string) =>
         applicantIds.has(studentId) ? availability[studentId] ?? [] : [],
+      notifications: notifications.filter((n) => n.userId === id),
     };
-  }, [id, businesses, vacancies, applications, students, availability]);
+  }, [id, businesses, vacancies, applications, students, availability, notifications]);
 }

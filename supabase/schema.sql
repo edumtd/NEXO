@@ -426,3 +426,321 @@ create policy "service_requests_select_student" on service_requests for select
 create policy "service_requests_respond_student" on service_requests for update
   using (owns_service_offer(offer_id) and status = 'enviada')
   with check (owns_service_offer(offer_id) and status in ('aceptada', 'rechazada'));
+
+-- ═════════════════════════ Notificaciones del negocio ═════════════════════════
+-- Avisa al negocio cuando un estudiante se postula a una de sus vacantes.
+-- Solo incluye nombre del estudiante y título de la vacante (sin correo ni disponibilidad).
+create or replace function notify_new_application()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  insert into notifications (user_id, title, body)
+  select v.business_id, 'Nueva postulación',
+         format('%s se postuló a "%s".', sp.full_name, v.title)
+  from vacancies v
+  join student_profiles sp on sp.id = new.student_id
+  where v.id = new.vacancy_id;
+  return new;
+end;
+$$;
+
+create trigger on_application_insert
+  after insert on applications
+  for each row execute function notify_new_application();
+
+-- ═════════════════════════ Notificaciones interactivas ═════════════════════════
+-- Cada notificación lleva un tipo y una ruta interna de la app a la que lleva al tocarla.
+alter table notifications
+  add column kind text not null default 'sistema'
+    check (kind in ('postulacion', 'solicitud_servicio', 'sistema'));
+alter table notifications
+  add column link text
+    check (link is null or (link like '/%' and link not like '//%'));
+
+-- Redefinimos las funciones que insertan notificaciones para que llenen kind y link.
+create or replace function notify_application_status()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.status is distinct from old.status then
+    insert into notifications (user_id, kind, link, title, body)
+    select new.student_id, 'postulacion', '/estudiante/vacante/' || v.id,
+           'Tu postulación cambió de estado',
+           format('%s marcó tu postulación a "%s" como %s.', b.name, v.title, new.status)
+    from vacancies v join business_profiles b on b.id = v.business_id
+    where v.id = new.vacancy_id;
+  end if;
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+create or replace function notify_new_application()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  insert into notifications (user_id, kind, link, title, body)
+  select v.business_id, 'postulacion', '/negocio/postulaciones?vacancy=' || v.id,
+         'Nueva postulación',
+         format('%s se postuló a "%s".', sp.full_name, v.title)
+  from vacancies v
+  join student_profiles sp on sp.id = new.student_id
+  where v.id = new.vacancy_id;
+  return new;
+end;
+$$;
+
+create or replace function on_service_request_change()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  o record;
+  b_name text;
+  s_name text;
+begin
+  select so.student_id, so.title into o from service_offers so where so.id = new.offer_id;
+  select bp.name into b_name from business_profiles bp where bp.id = new.business_id;
+  select sp.full_name into s_name from student_profiles sp where sp.id = o.student_id;
+
+  if tg_op = 'INSERT' then
+    insert into notifications (user_id, kind, link, title, body)
+    values (o.student_id, 'solicitud_servicio', '/estudiante/servicios', 'Nueva solicitud de servicio',
+            format('%s te envió una solicitud para "%s".', b_name, o.title));
+    return new;
+  end if;
+
+  if (new.offer_id, new.business_id, new.message, new.days, new.start_minute, new.end_minute)
+     is distinct from (old.offer_id, old.business_id, old.message, old.days, old.start_minute, old.end_minute) then
+    raise exception 'Solo se puede cambiar el estado de una solicitud';
+  end if;
+
+  if new.status is distinct from old.status then
+    if new.status in ('aceptada', 'rechazada') then
+      insert into notifications (user_id, kind, link, title, body)
+      values (new.business_id, 'solicitud_servicio', '/negocio/postulaciones?tipo=servicios',
+              case when new.status = 'aceptada' then 'Solicitud aceptada' else 'Solicitud rechazada' end,
+              format('%s %s tu solicitud para "%s".', s_name,
+                     case when new.status = 'aceptada' then 'aceptó' else 'rechazó' end, o.title));
+    elsif new.status = 'completada' then
+      insert into notifications (user_id, kind, link, title, body)
+      values (o.student_id, 'solicitud_servicio', '/estudiante/servicios', 'Servicio completado',
+              format('%s marcó como completado "%s".', b_name, o.title));
+    end if;
+  end if;
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+-- ═════════════════════════ Seguimiento de servicios (Talento) ═════════════════════════
+-- Flujo: enviada → aceptada (con fecha estimada) → en_proceso → entregada → completada
+--        enviada → rechazada · enviada|aceptada → cancelada (cualquiera de las partes, con motivo)
+--        entregada → en_proceso (el negocio pide ajustes)
+--
+-- IMPORTANTE: ejecuta primero estas 3 líneas por separado. Postgres no permite usar
+-- valores nuevos de un enum en la misma transacción en que se agregan.
+alter type service_request_status add value if not exists 'en_proceso';
+alter type service_request_status add value if not exists 'entregada';
+alter type service_request_status add value if not exists 'cancelada';
+
+-- ── A partir de aquí, ejecútalo en una segunda corrida ──
+
+alter table service_requests add column estimated_date date;
+alter table service_requests add column cancel_reason text
+  check (cancel_reason is null or length(cancel_reason) between 10 and 300);
+alter table service_requests add column cancelled_by user_role;
+
+-- Una sola solicitud abierta por servicio y negocio, ahora contando los estados nuevos.
+-- (Índice adicional; el original sigue existiendo y queda cubierto por este.)
+create unique index service_requests_one_open_v2
+  on service_requests (offer_id, business_id)
+  where status in ('enviada', 'aceptada', 'en_proceso', 'entregada');
+
+-- Bitácora estructurada (no es chat): el prestador registra avances, cambios de fecha y entregas;
+-- el negocio solo escribe al pedir ajustes.
+create table service_updates (
+  id uuid primary key default gen_random_uuid(),
+  request_id uuid not null references service_requests (id) on delete cascade,
+  kind text not null check (kind in ('avance', 'ajuste', 'cambio_fecha', 'entrega')),
+  message text not null check (length(message) between 10 and 300),
+  link text check (link is null or link ~ '^https://'),
+  created_at timestamptz not null default now()
+);
+create index on service_updates (request_id);
+
+alter table service_updates enable row level security;
+
+-- Solo las dos partes de la solicitud leen su bitácora.
+create policy "service_updates_select_parties" on service_updates for select
+  using (exists (
+    select 1 from service_requests r
+    where r.id = request_id and (r.business_id = auth.uid() or owns_service_offer(r.offer_id))
+  ));
+
+-- El prestador inserta avances/cambios de fecha/entregas mientras el trabajo está en proceso.
+-- Orden esperado desde la app: insertar la entrega y después cambiar el estado a 'entregada'.
+create policy "service_updates_insert_student" on service_updates for insert
+  with check (
+    kind in ('avance', 'cambio_fecha', 'entrega')
+    and exists (
+      select 1 from service_requests r
+      where r.id = request_id and owns_service_offer(r.offer_id) and r.status = 'en_proceso'
+    )
+  );
+
+-- El negocio solo inserta 'ajuste' sobre una entrega pendiente de revisar.
+-- Orden esperado: insertar el ajuste y después regresar el estado a 'en_proceso'.
+create policy "service_updates_insert_business" on service_updates for insert
+  with check (
+    kind = 'ajuste'
+    and exists (
+      select 1 from service_requests r
+      where r.id = request_id and r.business_id = auth.uid() and r.status = 'entregada'
+    )
+  );
+-- Sin políticas de UPDATE ni DELETE: la bitácora es inmutable.
+
+-- Las políticas de UPDATE ahora solo identifican a las partes;
+-- qué transición puede hacer cada rol lo valida el trigger.
+drop policy "service_requests_complete_business" on service_requests;
+drop policy "service_requests_respond_student" on service_requests;
+
+create policy "service_requests_update_business" on service_requests for update
+  using (business_id = auth.uid()) with check (business_id = auth.uid());
+create policy "service_requests_update_student" on service_requests for update
+  using (owns_service_offer(offer_id)) with check (owns_service_offer(offer_id));
+
+-- Valida transiciones por rol, protege campos y notifica a la otra parte con enlace al detalle.
+create or replace function on_service_request_change()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  o record;
+  b_name text;
+  s_name text;
+  actor user_role;
+  move text;
+  student_link text := '/estudiante/solicitud/' || new.id;
+  business_link text := '/negocio/solicitud/' || new.id;
+begin
+  select so.student_id, so.title into o from service_offers so where so.id = new.offer_id;
+  select bp.name into b_name from business_profiles bp where bp.id = new.business_id;
+  select sp.full_name into s_name from student_profiles sp where sp.id = o.student_id;
+
+  if tg_op = 'INSERT' then
+    insert into notifications (user_id, kind, link, title, body)
+    values (o.student_id, 'solicitud_servicio', student_link, 'Nueva solicitud de servicio',
+            format('%s te envió una solicitud para "%s".', b_name, o.title));
+    return new;
+  end if;
+
+  if (new.offer_id, new.business_id, new.message, new.days, new.start_minute, new.end_minute, new.created_at)
+     is distinct from (old.offer_id, old.business_id, old.message, old.days, old.start_minute, old.end_minute, old.created_at) then
+    raise exception 'Solo se puede cambiar el estado, la fecha estimada o la cancelación';
+  end if;
+
+  -- auth.uid() es null cuando escribe el service role (administración): se permite sin validar.
+  if auth.uid() is null then
+    new.updated_at := now();
+    return new;
+  elsif auth.uid() = new.business_id then
+    actor := 'negocio';
+  elsif auth.uid() = o.student_id then
+    actor := 'estudiante';
+  else
+    raise exception 'No participas en esta solicitud';
+  end if;
+
+  move := old.status::text || '>' || new.status::text;
+
+  if new.status = old.status then
+    -- Único cambio sin transición: el prestador mueve la fecha estimada durante el trabajo.
+    if new.estimated_date is distinct from old.estimated_date then
+      if actor <> 'estudiante' or new.status <> 'en_proceso' or new.estimated_date < current_date then
+        raise exception 'Cambio de fecha no permitido';
+      end if;
+      insert into notifications (user_id, kind, link, title, body)
+      values (new.business_id, 'solicitud_servicio', business_link, 'Cambio de fecha estimada',
+              format('%s movió la entrega de "%s" al %s.', s_name, o.title, to_char(new.estimated_date, 'DD/MM/YYYY')));
+    end if;
+    new.updated_at := now();
+    return new;
+  end if;
+
+  if actor = 'estudiante' and move in ('enviada>aceptada', 'enviada>rechazada', 'aceptada>en_proceso',
+                                       'en_proceso>entregada', 'aceptada>cancelada') then
+    null;
+  elsif actor = 'negocio' and move in ('entregada>completada', 'entregada>en_proceso',
+                                       'enviada>cancelada', 'aceptada>cancelada') then
+    null;
+  else
+    raise exception 'Transición no permitida para %: %', actor, move;
+  end if;
+
+  if new.status = 'aceptada' and (new.estimated_date is null or new.estimated_date < current_date) then
+    raise exception 'Aceptar requiere una fecha estimada de entrega no anterior a hoy';
+  end if;
+  if new.status = 'cancelada' and (new.cancel_reason is null or new.cancelled_by is distinct from actor) then
+    raise exception 'Cancelar requiere motivo y debe registrarse quién cancela';
+  end if;
+
+  if actor = 'estudiante' then
+    insert into notifications (user_id, kind, link, title, body)
+    values (new.business_id, 'solicitud_servicio', business_link,
+      case new.status
+        when 'aceptada' then 'Solicitud aceptada'
+        when 'rechazada' then 'Solicitud rechazada'
+        when 'en_proceso' then 'Trabajo iniciado'
+        when 'entregada' then 'Servicio entregado'
+        else 'Solicitud cancelada' end,
+      case new.status
+        when 'aceptada' then format('%s aceptó tu solicitud para "%s". Entrega estimada: %s.', s_name, o.title, to_char(new.estimated_date, 'DD/MM/YYYY'))
+        when 'rechazada' then format('%s rechazó tu solicitud para "%s".', s_name, o.title)
+        when 'en_proceso' then format('%s comenzó a trabajar en "%s".', s_name, o.title)
+        when 'entregada' then format('%s marcó como entregado "%s". Revisa y confirma.', s_name, o.title)
+        else format('%s canceló la solicitud de "%s". Motivo: %s', s_name, o.title, new.cancel_reason) end);
+  else
+    insert into notifications (user_id, kind, link, title, body)
+    values (o.student_id, 'solicitud_servicio', student_link,
+      case new.status
+        when 'completada' then 'Servicio finalizado'
+        when 'en_proceso' then 'Ajustes solicitados'
+        else 'Solicitud cancelada' end,
+      case new.status
+        when 'completada' then format('%s confirmó como finalizado "%s".', b_name, o.title)
+        when 'en_proceso' then format('%s pidió ajustes en "%s".', b_name, o.title)
+        else format('%s canceló la solicitud de "%s". Motivo: %s', b_name, o.title, new.cancel_reason) end);
+  end if;
+
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+-- Notifica al negocio cada avance publicado (entregas, ajustes y fechas se notifican al cambiar la solicitud).
+create or replace function notify_service_progress()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.kind = 'avance' then
+    insert into notifications (user_id, kind, link, title, body)
+    select r.business_id, 'solicitud_servicio', '/negocio/solicitud/' || r.id, 'Nuevo avance',
+           format('%s publicó un avance en "%s".', sp.full_name, so.title)
+    from service_requests r
+    join service_offers so on so.id = r.offer_id
+    join student_profiles sp on sp.id = so.student_id
+    where r.id = new.request_id;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger on_service_update_insert
+  after insert on service_updates
+  for each row execute function notify_service_progress();
+
+-- El correo del prestador se muestra al negocio a partir de que acepta (incluye los estados nuevos).
+create or replace function service_request_contact(req_id uuid)
+returns text language sql security definer stable set search_path = public, auth as $$
+  select u.email
+  from service_requests r
+  join service_offers o on o.id = r.offer_id
+  join auth.users u on u.id = o.student_id
+  where r.id = req_id
+    and r.business_id = auth.uid()
+    and r.status in ('aceptada', 'en_proceso', 'entregada', 'completada');
+$$;

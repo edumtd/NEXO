@@ -8,7 +8,8 @@ import { STUDENT_HIDDEN_ROUTES, STUDENT_LINKS, useIsWideWeb, useTabBarOptions } 
 
 export default function EstudianteLayout() {
   const { session } = useApp();
-  const { profile } = useCurrentStudent();
+  const { profile, notifications } = useCurrentStudent();
+  const unread = notifications.filter((n) => !n.read).length;
   const tabBarOptions = useTabBarOptions();
   const wide = useIsWideWeb();
   if (!session) return <Redirect href="/" />;
@@ -24,6 +25,7 @@ export default function EstudianteLayout() {
                 links={STUDENT_LINKS}
                 title={profile?.fullName ?? "Estudiante"}
                 subtitle={profile ? ACADEMIC_STATUS_LABELS[profile.academicStatus] : "Estudiante"}
+                counts={{ notificaciones: unread }}
               />
             )
           : undefined

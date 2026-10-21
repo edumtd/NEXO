@@ -195,3 +195,69 @@ export const serviceRequestSchema = z
     }
   });
 export type ServiceRequestValues = z.infer<typeof serviceRequestSchema>;
+
+// ───────── Seguimiento de solicitudes de servicio ─────────
+
+const todayIso = () => new Date().toISOString().slice(0, 10);
+
+/** Fecha AAAA-MM-DD válida y no anterior a hoy. */
+const futureDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Usa el formato AAAA-MM-DD")
+  .refine((s) => !Number.isNaN(Date.parse(s)), "Fecha no válida")
+  .refine((s) => s >= todayIso(), "La fecha no puede ser anterior a hoy");
+
+const optionalHttpsLink = z.string().trim().refine(isHttpsUrlOrEmpty, "Usa un enlace que empiece con https://");
+
+const noDiscrimination = (fields: string[]) => (v: Record<string, unknown>, ctx: z.RefinementCtx) => {
+  for (const field of fields) {
+    const value = v[field];
+    const term = typeof value === "string" ? findDiscriminatoryTerm(value) : undefined;
+    if (term) {
+      ctx.addIssue({
+        code: "custom",
+        path: [field],
+        message: `Evita criterios discriminatorios ("${term}").`,
+      });
+    }
+  }
+};
+
+const shortText = (min: number, label: string) =>
+  z.string().trim().min(min, `${label} (mín. ${min} caracteres)`).max(300, "Máximo 300 caracteres");
+
+export const acceptServiceSchema = z.object({ estimatedDate: futureDate });
+export type AcceptServiceValues = z.infer<typeof acceptServiceSchema>;
+
+export const serviceProgressSchema = z
+  .object({ message: shortText(10, "Describe el avance"), link: optionalHttpsLink })
+  .superRefine(noDiscrimination(["message"]));
+export type ServiceProgressValues = z.infer<typeof serviceProgressSchema>;
+
+export const serviceDateChangeSchema = z
+  .object({ estimatedDate: futureDate, reason: shortText(10, "Explica el motivo") })
+  .superRefine(noDiscrimination(["reason"]));
+export type ServiceDateChangeValues = z.infer<typeof serviceDateChangeSchema>;
+
+export const serviceDeliverySchema = z
+  .object({
+    message: z.string().trim().max(300, "Máximo 300 caracteres"),
+    link: optionalHttpsLink,
+    /** true en servicios remotos: exige al menos una nota o un enlace. */
+    requireEvidence: z.boolean(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.message && v.message.length < 10) {
+      ctx.addIssue({ code: "custom", path: ["message"], message: "La nota debe tener al menos 10 caracteres" });
+    }
+    if (v.requireEvidence && !v.message && !v.link) {
+      ctx.addIssue({ code: "custom", path: ["message"], message: "Agrega una nota o un enlace del entregable" });
+    }
+    noDiscrimination(["message"])(v, ctx);
+  });
+export type ServiceDeliveryValues = z.infer<typeof serviceDeliverySchema>;
+
+export const serviceNoteSchema = z
+  .object({ note: shortText(10, "Escribe una nota") })
+  .superRefine(noDiscrimination(["note"]));
+export type ServiceNoteValues = z.infer<typeof serviceNoteSchema>;

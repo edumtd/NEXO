@@ -2,7 +2,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import {
   CalendarCheck,
   Check,
-  CheckCheck,
+  ChevronRight,
   CircleDollarSign,
   Mail,
   MapPin,
@@ -12,10 +12,11 @@ import {
   X,
 } from "lucide-react-native";
 import { useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 
 import { Screen } from "@/components/Screen";
 import { formatRate } from "@/components/ServiceCard";
+import { ServiceProgress } from "@/components/ServiceProgress";
 import {
   AcademicStatusBadge,
   ApplicationStatusBadge,
@@ -24,7 +25,7 @@ import {
 } from "@/components/StatusBadges";
 import { Avatar, Button, Card, Chip, EmptyState } from "@/components/ui";
 import { useBusinessApplicants, type ApplicantItem } from "@/hooks/useBusinessApplicants";
-import { useBusinessServiceRequests, type BusinessRequestItem } from "@/hooks/useServiceRequests";
+import { hasSchedule, useBusinessServiceRequests, type BusinessRequestItem } from "@/hooks/useServiceRequests";
 import { formatDate, formatDays, formatRange } from "@/lib/format";
 import { useApp, useCurrentBusiness } from "@/store/AppStore";
 import { colors } from "@/theme/colors";
@@ -126,19 +127,14 @@ function ServiceRequestList({ items }: { items: BusinessRequestItem[] }) {
   );
 }
 
+/** Tarjeta resumida: las acciones (confirmar, ajustes, cancelar) viven en el detalle. */
 function ServiceRequestCard({ item }: { item: BusinessRequestItem }) {
-  const { completeServiceRequest } = useApp();
-  const [completing, setCompleting] = useState(false);
-  const { request: r, offer, student, compatibility, contactEmail } = item;
-
-  const complete = async () => {
-    setCompleting(true);
-    await completeServiceRequest(r.id);
-    setCompleting(false);
-  };
-
+  const { request: r, offer, student, compatibility } = item;
   return (
-    <Card>
+    <Card
+      onPress={() => router.push(`/negocio/solicitud/${r.id}`)}
+      accessibilityLabel={`Solicitud a ${student.fullName} para ${offer.title}`}
+    >
       <View className="flex-row items-center gap-3">
         <Avatar name={student.fullName} size="lg" />
         <View className="flex-1">
@@ -153,40 +149,29 @@ function ServiceRequestCard({ item }: { item: BusinessRequestItem }) {
         <ServiceRequestStatusBadge status={r.status} />
       </View>
 
-      <Text className="mt-3 text-sm leading-5 text-ink">“{r.message}”</Text>
+      <View className="mt-4">
+        <ServiceProgress request={r} compact />
+      </View>
+
       <View className="mt-3 flex-row flex-wrap items-center gap-2">
         {compatibility && <CompatibilityBadge level={compatibility.level} />}
         <Text className="text-xs font-semibold text-ink-muted">
-          {r.days?.length && r.start !== undefined && r.end !== undefined
-            ? `${formatDays(r.days)} · ${formatRange(r.start, r.end)}`
-            : "Remoto, sin horario fijo"}
+          {hasSchedule(r) ? `${formatDays(r.days!)} · ${formatRange(r.start!, r.end!)}` : "Remoto, sin horario fijo"}
         </Text>
       </View>
-
-      <View className="mt-3 gap-1.5">
+      <View className="mt-2">
         <Row icon={CircleDollarSign} text={`${formatRate(offer)} (referencia)`} />
-        {contactEmail ? (
-          <Row icon={Mail} text={contactEmail} />
-        ) : (
-          <Text className="text-xs text-ink-muted">El correo se mostrará cuando la persona acepte la solicitud.</Text>
-        )}
       </View>
-      <Text className="mt-3 text-xs text-ink-soft">
-        Enviada el {formatDate(r.createdAt)} · Actualizada el {formatDate(r.updatedAt)}
-      </Text>
-      <Pressable
-        onPress={() => router.push(`/negocio/talento/${offer.id}`)}
-        accessibilityRole="link"
-        className="mt-2 self-start"
-      >
-        <Text className="text-sm font-bold text-coral">Ver servicio</Text>
-      </Pressable>
 
-      {r.status === "aceptada" && (
-        <View className="mt-3">
-          <Button title="Marcar como completada" size="sm" variant="outline" icon={CheckCheck} loading={completing} onPress={complete} />
+      <View className="mt-3 flex-row items-center justify-between">
+        <Text className="text-xs text-ink-soft">Actualizada el {formatDate(r.updatedAt)}</Text>
+        <View className="flex-row items-center">
+          <Text className="text-xs font-bold text-coral">
+            {r.status === "entregada" ? "Revisar entrega" : "Ver seguimiento"}
+          </Text>
+          <ChevronRight size={14} color={colors.coral} />
         </View>
-      )}
+      </View>
     </Card>
   );
 }

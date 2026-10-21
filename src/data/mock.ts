@@ -7,6 +7,7 @@ import type {
   BusinessProfile,
   ServiceOffer,
   ServiceRequest,
+  ServiceUpdate,
   StudentProfile,
   Vacancy,
 } from "@/types";
@@ -318,11 +319,33 @@ export const mockApplications: Application[] = [
 export const mockNotifications: AppNotification[] = [
   {
     id: "n1",
+    kind: "postulacion",
+    link: "/estudiante/vacante/v1",
     userId: "stu-1",
     title: "Tu postulación avanzó",
     body: "Cafetería La Central cambió tu postulación a Entrevista.",
     createdAt: "2026-10-05",
     read: false,
+  },
+  {
+    id: "n3",
+    kind: "solicitud_servicio",
+    link: "/negocio/solicitud/sr1",
+    userId: "biz-1",
+    title: "Solicitud aceptada",
+    body: 'Jorge Hernández aceptó tu solicitud para "Control de inventario y compras".',
+    createdAt: "2026-10-06",
+    read: false,
+  },
+  {
+    id: "n2",
+    kind: "postulacion",
+    link: "/negocio/postulaciones?vacancy=v3",
+    userId: "biz-1",
+    title: "Nueva postulación",
+    body: 'Ana Sofía Ruiz se postuló a "Mesero fin de semana".',
+    createdAt: "2026-10-05",
+    read: true,
   },
 ];
 
@@ -423,9 +446,10 @@ export const mockServiceRequests: ServiceRequest[] = [
     days: [5],
     start: h(12),
     end: h(16),
-    status: "aceptada",
+    status: "en_proceso",
+    estimatedDate: "2026-10-31",
     createdAt: "2026-10-05",
-    updatedAt: "2026-10-06",
+    updatedAt: "2026-10-14",
   },
   {
     id: "sr2",
@@ -456,5 +480,52 @@ export const mockServiceRequests: ServiceRequest[] = [
     status: "enviada",
     createdAt: "2026-10-08",
     updatedAt: "2026-10-08",
+  },
+  {
+    id: "sr5",
+    offerId: "so2",
+    businessId: "biz-1",
+    message: "Queremos renovar el logotipo y el menú impreso de la pizzería.",
+    days: [5],
+    start: h(12),
+    end: h(14),
+    status: "entregada",
+    estimatedDate: "2026-10-20",
+    createdAt: "2026-10-02",
+    updatedAt: "2026-10-19",
+  },
+];
+
+// Bitácora de seguimiento: avances, cambios de fecha, entregas y ajustes.
+export const mockServiceUpdates: ServiceUpdate[] = [
+  {
+    id: "su1",
+    requestId: "sr1",
+    kind: "avance",
+    message: "Hice el conteo inicial de la bodega: 84 productos registrados en la hoja de inventario.",
+    createdAt: "2026-10-10",
+  },
+  {
+    id: "su2",
+    requestId: "sr1",
+    kind: "avance",
+    message: "Armé la lista de proveedores y una propuesta de compras semanales para revisar.",
+    createdAt: "2026-10-14",
+  },
+  {
+    id: "su3",
+    requestId: "sr5",
+    kind: "avance",
+    message: "Comparto tres propuestas de logotipo para elegir la dirección del diseño.",
+    link: "https://portafolio.demo/ana/pizzeria-roma/bocetos",
+    createdAt: "2026-10-09",
+  },
+  {
+    id: "su4",
+    requestId: "sr5",
+    kind: "entrega",
+    message: "Logotipo final en PNG y PDF, y menú en tamaño carta listo para imprimir.",
+    link: "https://portafolio.demo/ana/pizzeria-roma/final",
+    createdAt: "2026-10-19",
   },
 ];

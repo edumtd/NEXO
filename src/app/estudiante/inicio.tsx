@@ -1,38 +1,30 @@
 import { router } from "expo-router";
-import { Bell, CalendarClock, Search, UserPen } from "lucide-react-native";
-import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { CalendarClock, Search, UserPen } from "lucide-react-native";
+import { Text, View } from "react-native";
 
+import { NotificationBell, NotificationsPanel, useNotificationsToggle } from "@/components/Notifications";
 import { Screen, SectionTitle } from "@/components/Screen";
 import { VacancyCard } from "@/components/VacancyCard";
 import { Avatar, Button, Card, EmptyState, ProgressRing } from "@/components/ui";
 import { useStudentVacancies } from "@/hooks/useStudentVacancies";
 import { totalWeeklyMinutes } from "@/lib/compatibility";
-import { formatDate } from "@/lib/format";
-import { useApp, useCurrentStudent } from "@/store/AppStore";
+import { useCurrentStudent } from "@/store/AppStore";
 import { colors } from "@/theme/colors";
 
 const WEEKLY_HOURS_REFERENCE = 30;
 
 export default function EstudianteInicio() {
-  const { markNotificationsRead } = useApp();
   const { profile, blocks, applications, notifications } = useCurrentStudent();
   const items = useStudentVacancies();
-  const [showNotifications, setShowNotifications] = useState(false);
+  const { open: showNotifications, toggle: toggleNotifications, unread } = useNotificationsToggle(notifications);
 
   if (!profile) return null;
   const firstName = profile.fullName.split(" ")[0];
   const hours = Math.round((totalWeeklyMinutes(blocks) / 60) * 10) / 10;
-  const unread = notifications.filter((n) => !n.read).length;
   const recommended = items.filter((i) => i.compatibility.level !== "no_compatible" && !i.application).slice(0, 3);
   const profileIncomplete = !profile.career || !profile.university || !profile.zone;
 
   const count = (s: string) => applications.filter((a) => a.status === s).length;
-
-  const toggleNotifications = () => {
-    setShowNotifications((v) => !v);
-    if (unread) markNotificationsRead();
-  };
 
   return (
     <Screen
@@ -50,36 +42,13 @@ export default function EstudianteInicio() {
                 </Text>
               </View>
             </View>
-            <Pressable
-              onPress={toggleNotifications}
-              accessibilityRole="button"
-              accessibilityLabel={`Notificaciones${unread ? `, ${unread} sin leer` : ""}`}
-              className="h-11 w-11 items-center justify-center rounded-full bg-white/10 active:bg-white/20"
-            >
-              <Bell size={22} color={colors.white} />
-              {unread > 0 && <View className="absolute right-2.5 top-2.5 h-2.5 w-2.5 rounded-full bg-coral" />}
-            </Pressable>
+            <NotificationBell unread={unread} onPress={toggleNotifications} />
           </View>
           <Text className="mt-6 text-3xl font-extrabold text-white">Hola, {firstName} </Text>
         </>
       }
     >
-      {showNotifications && (
-        <Card className="mb-4">
-          <Text className="mb-2 text-base font-extrabold text-navy">Notificaciones</Text>
-          {notifications.length === 0 ? (
-            <Text className="text-sm text-ink-muted">No tienes notificaciones.</Text>
-          ) : (
-            notifications.map((n) => (
-              <View key={n.id} className="border-t border-navy-50 py-2.5">
-                <Text className="text-sm font-bold text-ink">{n.title}</Text>
-                <Text className="text-sm text-ink-muted">{n.body}</Text>
-                <Text className="mt-0.5 text-xs text-ink-soft">{formatDate(n.createdAt)}</Text>
-              </View>
-            ))
-          )}
-        </Card>
-      )}
+      {showNotifications && <NotificationsPanel notifications={notifications} allHref="/estudiante/notificaciones" />}
 
       <View className="flex-row items-center gap-4 rounded-3xl border border-turquoise-100 bg-turquoise-50 p-5">
         <View className="flex-1">

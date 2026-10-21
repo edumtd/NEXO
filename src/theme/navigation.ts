@@ -1,5 +1,6 @@
 import type { Href, Tabs } from "expo-router";
 import {
+  Bell,
   Briefcase,
   CalendarClock,
   ClipboardList,
@@ -66,14 +67,15 @@ export const STUDENT_LINKS: NavLink[] = [
     tabLabel: "Servicios",
     icon: Sparkles,
     inTabBar: true,
-    match: ["/estudiante/publicar-servicio"],
+    match: ["/estudiante/publicar-servicio", "/estudiante/solicitud/"],
   },
   { name: "disponibilidad", href: "/estudiante/disponibilidad", label: "Disponibilidad", icon: CalendarClock, inTabBar: false },
+  { name: "notificaciones", href: "/estudiante/notificaciones", label: "Notificaciones", icon: Bell, inTabBar: false },
   { name: "perfil", href: "/estudiante/perfil", label: "Perfil", icon: User, inTabBar: true },
 ];
 
 /** Rutas de detalle que no aparecen en ninguna barra. */
-export const STUDENT_HIDDEN_ROUTES = ["vacante/[id]", "publicar-servicio"];
+export const STUDENT_HIDDEN_ROUTES = ["vacante/[id]", "publicar-servicio", "solicitud/[id]"];
 
 export const BUSINESS_LINKS: NavLink[] = [
   { name: "inicio", href: "/negocio/inicio", label: "Panel", icon: LayoutDashboard, inTabBar: true },
@@ -87,11 +89,12 @@ export const BUSINESS_LINKS: NavLink[] = [
     inTabBar: true,
     match: ["/negocio/talento/"],
   },
-  { name: "postulaciones", href: "/negocio/postulaciones", label: "Postulantes", icon: Users, inTabBar: true },
+  { name: "postulaciones", href: "/negocio/postulaciones", label: "Postulantes", icon: Users, inTabBar: true, match: ["/negocio/solicitud/"] },
+  { name: "notificaciones", href: "/negocio/notificaciones", label: "Notificaciones", icon: Bell, inTabBar: false },
   { name: "perfil", href: "/negocio/perfil", label: "Perfil del negocio", tabLabel: "Negocio", icon: Store, inTabBar: true },
 ];
 
-export const BUSINESS_HIDDEN_ROUTES = ["talento/[id]"];
+export const BUSINESS_HIDDEN_ROUTES = ["talento/[id]", "solicitud/[id]"];
 
 export const SIDEBAR_BREAKPOINT = 768;
 export const SIDEBAR_WIDTH = 260;
