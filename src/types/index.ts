@@ -34,6 +34,8 @@ export type ApplicationStatus =
   | "aceptada"
   | "rechazada";
 
+export type AcademicStatus = "activo" | "egresado";
+
 export interface StudentProfile {
   id: string;
   fullName: string;
@@ -44,6 +46,63 @@ export interface StudentProfile {
   skills: string[];
   interests: BusinessCategory[];
   availabilityPeriod: string;
+  academicStatus: AcademicStatus;
+}
+
+/** Datos del estudiante que un negocio puede ver en Talento (sin correo ni disponibilidad). */
+export type PublicStudent = Pick<
+  StudentProfile,
+  "id" | "fullName" | "career" | "university" | "zone" | "skills" | "academicStatus"
+>;
+
+export type ServiceCategory =
+  | "marketing"
+  | "administracion"
+  | "contabilidad"
+  | "diseno"
+  | "programacion"
+  | "fotografia_video"
+  | "idiomas"
+  | "eventos";
+
+export type ServiceModality = "presencial" | "remoto" | "hibrido";
+
+export type RatePeriod = "hora" | "proyecto";
+
+export type ServiceOfferStatus = "activo" | "pausado";
+
+export type ServiceRequestStatus = "enviada" | "aceptada" | "rechazada" | "completada";
+
+export interface ServiceOffer {
+  id: string;
+  studentId: string;
+  title: string;
+  category: ServiceCategory;
+  description: string;
+  deliverables: string[];
+  modality: ServiceModality;
+  /** Vacío cuando la modalidad es remota. */
+  zone: string;
+  /** Tarifa de referencia; el pago se acuerda fuera de NEXO. */
+  rate: number;
+  ratePeriod: RatePeriod;
+  portfolioUrl?: string;
+  status: ServiceOfferStatus;
+  createdAt: string;
+}
+
+export interface ServiceRequest {
+  id: string;
+  offerId: string;
+  businessId: string;
+  message: string;
+  /** Horario propuesto; solo en servicios presenciales o híbridos. */
+  days?: DayIndex[];
+  start?: number;
+  end?: number;
+  status: ServiceRequestStatus;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface BusinessProfile {

@@ -1,9 +1,48 @@
-import { CircleCheck, CircleDashed, CircleSlash } from "lucide-react-native";
+import { CircleCheck, CircleDashed, CircleSlash, GraduationCap } from "lucide-react-native";
 
 import { Badge, type BadgeTone } from "@/components/ui";
-import { APPLICATION_STATUS_LABELS, VACANCY_STATUS_LABELS } from "@/lib/constants";
+import {
+  ACADEMIC_STATUS_LABELS,
+  APPLICATION_STATUS_LABELS,
+  SERVICE_OFFER_STATUS_LABELS,
+  SERVICE_REQUEST_STATUS_LABELS,
+  VACANCY_STATUS_LABELS,
+} from "@/lib/constants";
 import { COMPATIBILITY_LABELS, type CompatibilityLevel } from "@/lib/compatibility";
-import type { ApplicationStatus, VacancyStatus } from "@/types";
+import type {
+  AcademicStatus,
+  ApplicationStatus,
+  ServiceOfferStatus,
+  ServiceRequestStatus,
+  VacancyStatus,
+} from "@/types";
+
+export function AcademicStatusBadge({ status }: { status: AcademicStatus }) {
+  return (
+    <Badge
+      label={ACADEMIC_STATUS_LABELS[status]}
+      tone={status === "egresado" ? "coral" : "info"}
+      icon={GraduationCap}
+    />
+  );
+}
+
+const requestTone: Record<ServiceRequestStatus, BadgeTone> = {
+  enviada: "info",
+  aceptada: "success",
+  rechazada: "danger",
+  completada: "neutral",
+};
+
+export function ServiceRequestStatusBadge({ status }: { status: ServiceRequestStatus }) {
+  return <Badge label={SERVICE_REQUEST_STATUS_LABELS[status]} tone={requestTone[status]} />;
+}
+
+export function ServiceOfferStatusBadge({ status }: { status: ServiceOfferStatus }) {
+  return (
+    <Badge label={SERVICE_OFFER_STATUS_LABELS[status]} tone={status === "activo" ? "success" : "warning"} />
+  );
+}
 
 const compatibilityTone: Record<CompatibilityLevel, BadgeTone> = {
   compatible: "success",

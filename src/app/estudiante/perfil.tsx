@@ -9,11 +9,11 @@ import { Screen, SectionTitle } from "@/components/Screen";
 import { TagInput } from "@/components/TagInput";
 import { Avatar, Button, Card, Chip, Input } from "@/components/ui";
 import { totalWeeklyMinutes } from "@/lib/compatibility";
-import { CATEGORY_LABELS, ZONES } from "@/lib/constants";
+import { ACADEMIC_STATUS_LABELS, CATEGORY_LABELS, ZONES } from "@/lib/constants";
 import { studentProfileSchema, type StudentProfileValues } from "@/lib/schemas";
 import { useApp, useCurrentStudent } from "@/store/AppStore";
 import { colors } from "@/theme/colors";
-import type { BusinessCategory } from "@/types";
+import type { AcademicStatus, BusinessCategory } from "@/types";
 
 const SKILL_SUGGESTIONS = ["Atención al cliente", "Caja", "Inventario", "Redes sociales", "Inglés", "Trabajo en equipo"];
 
@@ -35,6 +35,7 @@ export default function PerfilEstudiante() {
       zone: profile?.zone ?? "",
       skills: profile?.skills ?? [],
       interests: profile?.interests ?? [],
+      academicStatus: profile?.academicStatus ?? "activo",
     },
   });
 
@@ -86,6 +87,20 @@ export default function PerfilEstudiante() {
           name="career"
           render={({ field }) => (
             <Input label="Carrera" icon={BookOpen} placeholder="Ej. Psicología" value={field.value} onChangeText={field.onChange} onBlur={field.onBlur} error={errors.career?.message} />
+          )}
+        />
+        <Controller
+          control={control}
+          name="academicStatus"
+          render={({ field }) => (
+            <View>
+              <Text className="mb-2 text-sm font-semibold text-navy">Estatus</Text>
+              <View className="flex-row flex-wrap gap-2">
+                {(Object.keys(ACADEMIC_STATUS_LABELS) as AcademicStatus[]).map((s) => (
+                  <Chip key={s} size="sm" label={ACADEMIC_STATUS_LABELS[s]} selected={field.value === s} onPress={() => field.onChange(s)} />
+                ))}
+              </View>
+            </View>
           )}
         />
         <Controller

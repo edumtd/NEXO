@@ -1,65 +1,193 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { CalendarCheck, Check, Mail, MapPin, School, Users, X } from "lucide-react-native";
+import {
+  CalendarCheck,
+  Check,
+  CheckCheck,
+  CircleDollarSign,
+  Mail,
+  MapPin,
+  School,
+  Sparkles,
+  Users,
+  X,
+} from "lucide-react-native";
 import { useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 
 import { Screen } from "@/components/Screen";
-import { ApplicationStatusBadge, CompatibilityBadge } from "@/components/StatusBadges";
+import { formatRate } from "@/components/ServiceCard";
+import {
+  AcademicStatusBadge,
+  ApplicationStatusBadge,
+  CompatibilityBadge,
+  ServiceRequestStatusBadge,
+} from "@/components/StatusBadges";
 import { Avatar, Button, Card, Chip, EmptyState } from "@/components/ui";
 import { useBusinessApplicants, type ApplicantItem } from "@/hooks/useBusinessApplicants";
-import { formatDate } from "@/lib/format";
+import { useBusinessServiceRequests, type BusinessRequestItem } from "@/hooks/useServiceRequests";
+import { formatDate, formatDays, formatRange } from "@/lib/format";
 import { useApp, useCurrentBusiness } from "@/store/AppStore";
 import { colors } from "@/theme/colors";
 import type { ApplicationStatus } from "@/types";
 
+type Section = "vacantes" | "servicios";
+
 export default function NegocioPostulaciones() {
-  const params = useLocalSearchParams<{ vacancy?: string }>();
+  const params = useLocalSearchParams<{ vacancy?: string; tipo?: string }>();
   const { vacancies } = useCurrentBusiness();
   const items = useBusinessApplicants();
+  const requests = useBusinessServiceRequests();
+  const sectionFromParams: Section = params.tipo === "servicios" ? "servicios" : "vacantes";
+  const [section, setSection] = useState<Section>(sectionFromParams);
   const [vacancyFilter, setVacancyFilter] = useState<string | null>(params.vacancy ?? null);
-  const [lastParam, setLastParam] = useState(params.vacancy);
+  const [lastParams, setLastParams] = useState(`${params.vacancy}|${params.tipo}`);
 
   // Si llegamos desde otra pantalla con un filtro distinto, lo aplicamos.
-  if (params.vacancy !== lastParam) {
-    setLastParam(params.vacancy);
+  if (`${params.vacancy}|${params.tipo}` !== lastParams) {
+    setLastParams(`${params.vacancy}|${params.tipo}`);
     setVacancyFilter(params.vacancy ?? null);
+    setSection(params.vacancy ? "vacantes" : sectionFromParams);
   }
 
   const withApplicants = vacancies.filter((v) => items.some((i) => i.vacancy.id === v.id));
   const list = items.filter((i) => !vacancyFilter || i.vacancy.id === vacancyFilter);
 
   return (
-    <Screen title="Postulantes" subtitle="Ordenados por compatibilidad con el turno">
-      {withApplicants.length > 0 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-5 mb-5" contentContainerClassName="gap-2 px-5">
-          <Chip label={`Todas (${items.length})`} selected={!vacancyFilter} onPress={() => setVacancyFilter(null)} />
-          {withApplicants.map((v) => (
-            <Chip
-              key={v.id}
-              label={`${v.title} (${items.filter((i) => i.vacancy.id === v.id).length})`}
-              selected={vacancyFilter === v.id}
-              onPress={() => setVacancyFilter(v.id)}
-            />
-          ))}
-        </ScrollView>
-      )}
+    <Screen
+      title="Postulantes"
+      subtitle={
+        section === "vacantes"
+          ? "Ordenados por compatibilidad con el turno"
+          : "Solicitudes que enviaste en Talento"
+      }
+    >
+      <View className="mb-5 flex-row gap-2">
+        <Chip label={`Vacantes (${items.length})`} selected={section === "vacantes"} onPress={() => setSection("vacantes")} />
+        <Chip label={`Servicios (${requests.length})`} selected={section === "servicios"} onPress={() => setSection("servicios")} />
+      </View>
 
-      {list.length === 0 ? (
-        <EmptyState
-          icon={Users}
-          title="Aún no hay postulaciones"
-          description="Solo verás perfiles de estudiantes que se postulen a tus vacantes."
-          actionLabel="Ver mis vacantes"
-          onAction={() => router.push("/negocio/vacantes")}
-        />
+      {section === "servicios" ? (
+        <ServiceRequestList items={requests} />
       ) : (
-        <View className="gap-3">
-          {list.map((item) => (
-            <ApplicantCard key={item.application.id} item={item} />
-          ))}
-        </View>
+        <>
+          {withApplicants.length > 0 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-5 mb-5" contentContainerClassName="gap-2 px-5">
+              <Chip label={`Todas (${items.length})`} selected={!vacancyFilter} onPress={() => setVacancyFilter(null)} />
+              {withApplicants.map((v) => (
+                <Chip
+                  key={v.id}
+                  label={`${v.title} (${items.filter((i) => i.vacancy.id === v.id).length})`}
+                  selected={vacancyFilter === v.id}
+                  onPress={() => setVacancyFilter(v.id)}
+                />
+              ))}
+            </ScrollView>
+          )}
+
+          {list.length === 0 ? (
+            <EmptyState
+              icon={Users}
+              title="Aún no hay postulaciones"
+              description="Solo verás perfiles de estudiantes que se postulen a tus vacantes."
+              actionLabel="Ver mis vacantes"
+              onAction={() => router.push("/negocio/vacantes")}
+            />
+          ) : (
+            <View className="gap-3">
+              {list.map((item) => (
+                <ApplicantCard key={item.application.id} item={item} />
+              ))}
+            </View>
+          )}
+        </>
       )}
     </Screen>
+  );
+}
+
+function ServiceRequestList({ items }: { items: BusinessRequestItem[] }) {
+  if (items.length === 0) {
+    return (
+      <EmptyState
+        icon={Sparkles}
+        title="Aún no envías solicitudes"
+        description="Busca servicios de marketing, administración, diseño y más en Talento."
+        actionLabel="Ir a Talento"
+        onAction={() => router.push("/negocio/talento")}
+      />
+    );
+  }
+  return (
+    <View className="gap-3">
+      {items.map((item) => (
+        <ServiceRequestCard key={item.request.id} item={item} />
+      ))}
+    </View>
+  );
+}
+
+function ServiceRequestCard({ item }: { item: BusinessRequestItem }) {
+  const { completeServiceRequest } = useApp();
+  const [completing, setCompleting] = useState(false);
+  const { request: r, offer, student, compatibility, contactEmail } = item;
+
+  const complete = async () => {
+    setCompleting(true);
+    await completeServiceRequest(r.id);
+    setCompleting(false);
+  };
+
+  return (
+    <Card>
+      <View className="flex-row items-center gap-3">
+        <Avatar name={student.fullName} size="lg" />
+        <View className="flex-1">
+          <Text className="text-lg font-extrabold text-ink" numberOfLines={1}>
+            {student.fullName}
+          </Text>
+          <Text className="mb-1 text-sm text-ink-muted" numberOfLines={1}>
+            {offer.title}
+          </Text>
+          <AcademicStatusBadge status={student.academicStatus} />
+        </View>
+        <ServiceRequestStatusBadge status={r.status} />
+      </View>
+
+      <Text className="mt-3 text-sm leading-5 text-ink">“{r.message}”</Text>
+      <View className="mt-3 flex-row flex-wrap items-center gap-2">
+        {compatibility && <CompatibilityBadge level={compatibility.level} />}
+        <Text className="text-xs font-semibold text-ink-muted">
+          {r.days?.length && r.start !== undefined && r.end !== undefined
+            ? `${formatDays(r.days)} · ${formatRange(r.start, r.end)}`
+            : "Remoto, sin horario fijo"}
+        </Text>
+      </View>
+
+      <View className="mt-3 gap-1.5">
+        <Row icon={CircleDollarSign} text={`${formatRate(offer)} (referencia)`} />
+        {contactEmail ? (
+          <Row icon={Mail} text={contactEmail} />
+        ) : (
+          <Text className="text-xs text-ink-muted">El correo se mostrará cuando la persona acepte la solicitud.</Text>
+        )}
+      </View>
+      <Text className="mt-3 text-xs text-ink-soft">
+        Enviada el {formatDate(r.createdAt)} · Actualizada el {formatDate(r.updatedAt)}
+      </Text>
+      <Pressable
+        onPress={() => router.push(`/negocio/talento/${offer.id}`)}
+        accessibilityRole="link"
+        className="mt-2 self-start"
+      >
+        <Text className="text-sm font-bold text-coral">Ver servicio</Text>
+      </Pressable>
+
+      {r.status === "aceptada" && (
+        <View className="mt-3">
+          <Button title="Marcar como completada" size="sm" variant="outline" icon={CheckCheck} loading={completing} onPress={complete} />
+        </View>
+      )}
+    </Card>
   );
 }
 

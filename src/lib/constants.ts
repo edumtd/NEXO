@@ -1,9 +1,15 @@
 import type {
+  AcademicStatus,
   ApplicationStatus,
   BusinessCategory,
   DayIndex,
   EmploymentType,
+  RatePeriod,
   SalaryPeriod,
+  ServiceCategory,
+  ServiceModality,
+  ServiceOfferStatus,
+  ServiceRequestStatus,
   VacancyStatus,
 } from "@/types";
 
@@ -59,6 +65,51 @@ export const APPLICATION_STATUS_LABELS: Record<ApplicationStatus, string> = {
   entrevista: "Entrevista",
   aceptada: "Aceptada",
   rechazada: "Rechazada",
+};
+
+export const ACADEMIC_STATUS_LABELS: Record<AcademicStatus, string> = {
+  activo: "Estudiante activo",
+  egresado: "Egresado",
+};
+
+export const SERVICE_CATEGORY_LABELS: Record<ServiceCategory, string> = {
+  marketing: "Marketing y redes",
+  administracion: "Administración",
+  contabilidad: "Contabilidad",
+  diseno: "Diseño gráfico",
+  programacion: "Programación y web",
+  fotografia_video: "Fotografía y video",
+  idiomas: "Idiomas y traducción",
+  eventos: "Apoyo en eventos",
+};
+
+export const SERVICE_MODALITY_LABELS: Record<ServiceModality, string> = {
+  presencial: "Presencial",
+  remoto: "Remoto",
+  hibrido: "Híbrido",
+};
+
+export const RATE_PERIOD_LABELS: Record<RatePeriod, string> = {
+  hora: "hora",
+  proyecto: "proyecto",
+};
+
+/** Topes del filtro "tarifa máxima", según el periodo de la tarifa. */
+export const MAX_RATE_OPTIONS: Record<RatePeriod, number[]> = {
+  hora: [150, 250, 400],
+  proyecto: [1000, 2500, 5000],
+};
+
+export const SERVICE_OFFER_STATUS_LABELS: Record<ServiceOfferStatus, string> = {
+  activo: "Activo",
+  pausado: "Pausado",
+};
+
+export const SERVICE_REQUEST_STATUS_LABELS: Record<ServiceRequestStatus, string> = {
+  enviada: "Enviada",
+  aceptada: "Aceptada",
+  rechazada: "Rechazada",
+  completada: "Completada",
 };
 
 /** Franjas para filtrar por hora de inicio del turno. */

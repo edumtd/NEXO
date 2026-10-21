@@ -6,6 +6,7 @@ import { DISCRIMINATORY_TERMS } from "./constants";
 const role = z.enum(["estudiante", "negocio"]);
 const category = z.enum(["cafeteria", "restaurante", "comercio", "eventos", "libreria"]);
 const email = z.email("Ingresa un correo válido");
+const academicStatus = z.enum(["activo", "egresado"]);
 
 export const loginSchema = z.object({
   role,
@@ -21,6 +22,7 @@ export const registerSchema = z
     email,
     password: z.string().min(8, "Mínimo 8 caracteres"),
     confirm: z.string(),
+    academicStatus,
     isActiveStudent: z.boolean(),
   })
   .superRefine((v, ctx) => {
@@ -31,7 +33,7 @@ export const registerSchema = z
       ctx.addIssue({
         code: "custom",
         path: ["isActiveStudent"],
-        message: "Confirma que eres estudiante universitario activo",
+        message: "Confirma tu estatus universitario",
       });
     }
   });
@@ -44,6 +46,7 @@ export const studentProfileSchema = z.object({
   zone: z.string().min(1, "Selecciona una zona"),
   skills: z.array(z.string()).max(10, "Máximo 10 habilidades"),
   interests: z.array(category).min(1, "Elige al menos un interés"),
+  academicStatus,
 });
 export type StudentProfileValues = z.infer<typeof studentProfileSchema>;
 
@@ -111,3 +114,84 @@ export const vacancySchema = z
     }
   });
 export type VacancyValues = z.infer<typeof vacancySchema>;
+
+const isHttpsUrlOrEmpty = (s: string) => {
+  if (s === "") return true;
+  try {
+    const url = new URL(s);
+    return url.protocol === "https:" && url.hostname.includes(".");
+  } catch {
+    return false;
+  }
+};
+
+export const serviceOfferSchema = z
+  .object({
+    title: z.string().trim().min(3, "Escribe un título").max(60, "Máximo 60 caracteres"),
+    category: z.enum([
+      "marketing",
+      "administracion",
+      "contabilidad",
+      "diseno",
+      "programacion",
+      "fotografia_video",
+      "idiomas",
+      "eventos",
+    ]),
+    description: z.string().trim().min(20, "Describe tu servicio (mín. 20 caracteres)").max(500),
+    deliverables: z.string().refine((s) => toLines(s).length > 0, "Agrega al menos un entregable"),
+    modality: z.enum(["presencial", "remoto", "hibrido"]),
+    zone: z.string(),
+    rate: z
+      .string()
+      .trim()
+      .regex(/^\d+(\.\d{1,2})?$/, "Escribe una cantidad válida")
+      .refine((s) => Number(s) > 0, "La tarifa debe ser mayor a 0"),
+    ratePeriod: z.enum(["hora", "proyecto"]),
+    portfolioUrl: z.string().trim().refine(isHttpsUrlOrEmpty, "Usa un enlace que empiece con https://"),
+  })
+  .superRefine((v, ctx) => {
+    if (v.modality !== "remoto" && !v.zone) {
+      ctx.addIssue({ code: "custom", path: ["zone"], message: "Selecciona una zona" });
+    }
+    for (const field of ["title", "description", "deliverables"] as const) {
+      const term = findDiscriminatoryTerm(v[field]);
+      if (term) {
+        ctx.addIssue({
+          code: "custom",
+          path: [field],
+          message: `Evita criterios discriminatorios ("${term}"). Describe habilidades o tareas.`,
+        });
+      }
+    }
+  });
+export type ServiceOfferValues = z.infer<typeof serviceOfferSchema>;
+
+export const serviceRequestSchema = z
+  .object({
+    message: z.string().trim().min(10, "Cuenta qué necesitas (mín. 10 caracteres)").max(500),
+    /** true cuando el servicio es presencial o híbrido */
+    needsSchedule: z.boolean(),
+    days: z.array(day),
+    start: z.number(),
+    end: z.number(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.needsSchedule) {
+      if (v.days.length === 0) {
+        ctx.addIssue({ code: "custom", path: ["days"], message: "Selecciona al menos un día" });
+      }
+      if (v.end - v.start < 60) {
+        ctx.addIssue({ code: "custom", path: ["end"], message: "El horario debe durar al menos 1 hora" });
+      }
+    }
+    const term = findDiscriminatoryTerm(v.message);
+    if (term) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["message"],
+        message: `Evita criterios discriminatorios ("${term}"). Describe la tarea que necesitas.`,
+      });
+    }
+  });
+export type ServiceRequestValues = z.infer<typeof serviceRequestSchema>;
