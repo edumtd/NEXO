@@ -1,8 +1,8 @@
 // Estado de la app conectado a Supabase.
-// - Etapas 1–3 (cuentas, perfiles, vacantes, postulaciones, disponibilidad, Talento y notificaciones)
-//   se leen y escriben en Supabase. Cada acción escribe y después recarga lo que el usuario puede ver
-//   (la RLS decide qué filas llegan). Las notificaciones las crean triggers del servidor.
-// - Etapa 4 (vacantes guardadas, entrevistas y reportes) sigue en memoria por ahora.
+// Todo (cuentas, perfiles, vacantes, postulaciones, disponibilidad, Talento, notificaciones, vacantes
+// guardadas, entrevistas y reportes) se lee y escribe en Supabase. Cada acción escribe y después recarga
+// lo que el usuario puede ver (la RLS decide qué filas llegan). Las notificaciones las crean triggers
+// del servidor; la única local es el recordatorio de fin de periodo.
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import {
   createContext,
@@ -24,8 +24,10 @@ import {
   businessFromRow,
   businessPatchToRow,
   dbErrorMessage,
+  interviewFromRow,
   notificationFromRow,
   publicStudentFromRow,
+  savedVacancyFromRow,
   serviceOfferFromRow,
   serviceOfferInputToRow,
   serviceRequestFromRow,
@@ -37,16 +39,18 @@ import {
   type ApplicationRow,
   type AvailabilityRow,
   type BusinessRow,
+  type InterviewRow,
   type NotificationRow,
   type ProfileRow,
   type PublicStudentRow,
+  type SavedVacancyRow,
   type ServiceOfferRow,
   type ServiceRequestRow,
   type ServiceUpdateRow,
   type StudentRow,
   type VacancyRow,
 } from "@/lib/db";
-import { formatDate, todayISO, uid } from "@/lib/format";
+import { formatDate, todayISO } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
 import type {
   AcademicStatus,
@@ -112,10 +116,10 @@ interface AppState {
   applicationInsights: Record<string, ApplicationInsight>;
   /** Solo para negocios: por id de solicitud de servicio. */
   requestInsights: Record<string, RequestInsight>;
-  // Etapa 4: todavía en memoria.
+  /** Solo para estudiantes: sus vacantes guardadas (el negocio no sabe quién guardó). */
   savedVacancies: SavedVacancy[];
+  /** Propuestas de entrevista de las postulaciones que el usuario puede ver. */
   interviews: InterviewProposal[];
-  reports: Report[];
   /** Último error de una acción, para el aviso global. */
   lastError: string | null;
 }
@@ -135,7 +139,6 @@ const EMPTY_STATE: AppState = {
   requestInsights: {},
   savedVacancies: [],
   interviews: [],
-  reports: [],
   lastError: null,
 };
 
@@ -157,7 +160,8 @@ interface AppActions {
   updateStudentProfile: (patch: Partial<Omit<StudentProfile, "id">>) => Promise<ActionResult>;
   /** Reemplaza todos los bloques. periodEndDate: "" borra la fecha de fin del periodo. */
   setAvailability: (blocks: AvailabilityBlock[], period?: string, periodEndDate?: string) => Promise<ActionResult>;
-  toggleSavedVacancy: (vacancyId: string) => void;
+  /** Cambia al instante y deshace si Supabase rechaza la escritura. */
+  toggleSavedVacancy: (vacancyId: string) => Promise<ActionResult>;
   applyToVacancy: (vacancyId: string) => Promise<ActionResult>;
   updateBusinessProfile: (patch: Partial<Omit<BusinessProfile, "id" | "verified">>) => Promise<ActionResult>;
   saveVacancy: (input: VacancyInput, id?: string) => Promise<ActionResult & { id?: string }>;
@@ -178,11 +182,11 @@ interface AppActions {
   requestServiceAdjustments: (id: string, note: string) => Promise<ActionResult>;
   /** Cualquiera de las dos partes, solo en estado enviada o aceptada. */
   cancelServiceRequest: (id: string, reason: string) => Promise<ActionResult>;
-  /** El negocio propone 2–3 horarios; pasa la postulación a "entrevista". */
+  /** El negocio propone 2–3 horarios (o nuevos, si se los pidieron); el servidor pasa la postulación a "entrevista". */
   proposeInterview: (applicationId: string, slots: InterviewSlot[]) => Promise<ActionResult>;
   /** El estudiante elige un horario (índice) o pide otros (null). */
-  respondInterview: (proposalId: string, index: number | null) => Promise<void>;
-  /** Un reporte por usuario y objetivo. */
+  respondInterview: (proposalId: string, index: number | null) => Promise<ActionResult>;
+  /** Un reporte por usuario y objetivo; solo lo lee administración. */
   submitReport: (input: Pick<Report, "targetType" | "targetId" | "reason" | "description">) => Promise<"ok" | "duplicado" | "error">;
 }
 
@@ -208,7 +212,7 @@ async function fetchSnapshot(client: SupabaseClient, user: User): Promise<Partia
   if (profError) throw profError;
   if (!prof) return null;
 
-  const [businesses, vacancies, applications, notifications, offers, requests, updates] = await Promise.all([
+  const [businesses, vacancies, applications, notifications, offers, requests, updates, interviews] = await Promise.all([
     client.from("business_profiles").select("*").returns<BusinessRow[]>(),
     client.from("vacancies").select("*").order("created_at", { ascending: false }).returns<VacancyRow[]>(),
     client.from("applications").select("*").returns<ApplicationRow[]>(),
@@ -221,8 +225,9 @@ async function fetchSnapshot(client: SupabaseClient, user: User): Promise<Partia
     client.from("service_offers").select("*").order("created_at", { ascending: false }).returns<ServiceOfferRow[]>(),
     client.from("service_requests").select("*").order("updated_at", { ascending: false }).returns<ServiceRequestRow[]>(),
     client.from("service_updates").select("*").order("created_at").returns<ServiceUpdateRow[]>(),
+    client.from("interview_proposals").select("*").returns<InterviewRow[]>(),
   ]);
-  const firstError = [businesses, vacancies, applications, notifications, offers, requests, updates].find((r) => r.error)?.error;
+  const firstError = [businesses, vacancies, applications, notifications, offers, requests, updates, interviews].find((r) => r.error)?.error;
   if (firstError) throw firstError;
 
   const common: Partial<AppState> = {
@@ -234,20 +239,24 @@ async function fetchSnapshot(client: SupabaseClient, user: User): Promise<Partia
     serviceOffers: (offers.data ?? []).map(serviceOfferFromRow),
     serviceRequests: (requests.data ?? []).map(serviceRequestFromRow),
     serviceUpdates: (updates.data ?? []).map(serviceUpdateFromRow),
+    interviews: (interviews.data ?? []).map(interviewFromRow),
   };
 
   if (prof.role === "estudiante") {
-    const [me, blocks] = await Promise.all([
+    const [me, blocks, saved] = await Promise.all([
       client.from("student_profiles").select("*").eq("id", user.id).maybeSingle<StudentRow>(),
       client.from("availability_blocks").select("*").eq("student_id", user.id).returns<AvailabilityRow[]>(),
+      client.from("saved_vacancies").select("*").eq("student_id", user.id).returns<SavedVacancyRow[]>(),
     ]);
     if (me.error) throw me.error;
     if (blocks.error) throw blocks.error;
+    if (saved.error) throw saved.error;
     if (!me.data) return null;
     return {
       ...common,
       students: [studentFromRow(me.data, user.email ?? "")],
       availability: { [user.id]: (blocks.data ?? []).map(availabilityFromRow) },
+      savedVacancies: (saved.data ?? []).map(savedVacancyFromRow),
       applicationInsights: {},
       requestInsights: {},
     };
@@ -281,6 +290,7 @@ async function fetchSnapshot(client: SupabaseClient, user: User): Promise<Partia
     ...common,
     students: ((publicStudents.data as PublicStudentRow[] | null) ?? []).map((r) => publicStudentFromRow(r, emailByStudent[r.id] ?? "")),
     availability: {},
+    savedVacancies: [],
     applicationInsights,
     requestInsights,
   };
@@ -657,78 +667,95 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [fail, updateRequest]
   );
 
-  // ───────── Etapa 4 (aún en memoria): guardadas, entrevistas y reportes ─────────
+  // ───────── Etapa 4: guardadas, entrevistas y reportes ─────────
 
-  const toggleSavedVacancy = useCallback((vacancyId: string) => {
-    setState((s) => {
-      if (s.session?.role !== "estudiante") return s;
-      const studentId = s.session.userId;
-      const saved = s.savedVacancies.some((x) => x.studentId === studentId && x.vacancyId === vacancyId);
-      return {
-        ...s,
-        savedVacancies: saved
-          ? s.savedVacancies.filter((x) => !(x.studentId === studentId && x.vacancyId === vacancyId))
-          : [...s.savedVacancies, { studentId, vacancyId, savedAt: todayISO() }],
-      };
-    });
-  }, []);
+  const toggleSavedVacancy = useCallback<AppActions["toggleSavedVacancy"]>(
+    async (vacancyId) => {
+      const session = stateRef.current.session;
+      if (!supabase) return fail(MISSING_CONFIG);
+      if (session?.role !== "estudiante") return fail(INVALID_SESSION);
+      const studentId = session.userId;
+      const wasSaved = stateRef.current.savedVacancies.some((x) => x.vacancyId === vacancyId);
+      const apply = (save: boolean) =>
+        setState((s) => ({
+          ...s,
+          savedVacancies: save
+            ? [...s.savedVacancies.filter((x) => x.vacancyId !== vacancyId), { studentId, vacancyId, savedAt: todayISO() }]
+            : s.savedVacancies.filter((x) => x.vacancyId !== vacancyId),
+        }));
+      // Cambio inmediato en pantalla; si la base lo rechaza, se deshace.
+      apply(!wasSaved);
+      const { error } = wasSaved
+        ? await supabase.from("saved_vacancies").delete().eq("student_id", studentId).eq("vacancy_id", vacancyId)
+        : await supabase.from("saved_vacancies").upsert({ student_id: studentId, vacancy_id: vacancyId }, { ignoreDuplicates: true });
+      if (error) {
+        apply(wasSaved);
+        return fail(dbErrorMessage(error, "No pudimos actualizar tus vacantes guardadas."));
+      }
+      return {};
+    },
+    [fail]
+  );
 
   const proposeInterview = useCallback<AppActions["proposeInterview"]>(
     async (applicationId, slots) => {
       const s = stateRef.current;
       const app = s.applications.find((a) => a.id === applicationId);
       if (!app || app.status === "aceptada" || app.status === "rechazada") return fail("Esta postulación ya está cerrada.");
-      const existing = s.interviews.find((p) => p.applicationId === applicationId);
-      if (existing?.status === "confirmada") return fail("La entrevista ya está confirmada.");
       if (slots.length < 2 || slots.length > 3) return fail("Propón de 2 a 3 horarios.");
-      // El cambio de estado sí se guarda en Supabase (y notifica al estudiante); los horarios, por ahora, en memoria.
-      if (app.status !== "entrevista") {
-        const result = await setApplicationStatus(applicationId, "entrevista");
-        if (result.error) return result;
+      const existing = s.interviews.find((p) => p.applicationId === applicationId);
+      if (existing && existing.status !== "reprogramar") {
+        return fail(existing.status === "confirmada" ? "La entrevista ya está confirmada." : "Ya enviaste horarios; espera la respuesta.");
       }
-      const now = todayISO();
-      setState((st) => ({
-        ...st,
-        interviews: existing
-          ? st.interviews.map((p) =>
-              p.id === existing.id ? { ...p, slots, selectedIndex: undefined, status: "propuesta", updatedAt: now } : p
-            )
-          : [...st.interviews, { id: uid("iv"), applicationId, slots, status: "propuesta", createdAt: now, updatedAt: now }],
-      }));
-      return {};
+      // El trigger on_interview_change pasa la postulación a "entrevista" y avisa al estudiante.
+      return mutate("negocio", "No pudimos enviar los horarios. Inténtalo de nuevo.", async (c) =>
+        existing
+          ? (await c.from("interview_proposals").update({ slots, status: "propuesta", selected_index: null }).eq("id", existing.id)).error
+          : (await c.from("interview_proposals").insert({ application_id: applicationId, slots })).error
+      );
     },
-    [fail, setApplicationStatus]
+    [fail, mutate]
   );
 
-  const respondInterview = useCallback<AppActions["respondInterview"]>(async (proposalId, index) => {
-    setState((s) => {
-      if (s.session?.role !== "estudiante") return s;
-      const proposal = s.interviews.find((p) => p.id === proposalId);
-      if (!proposal || proposal.status !== "propuesta") return s;
-      if (index !== null && !proposal.slots[index]) return s;
-      return {
-        ...s,
-        interviews: s.interviews.map((p) =>
-          p.id === proposalId
-            ? { ...p, status: index !== null ? "confirmada" : "reprogramar", selectedIndex: index ?? undefined, updatedAt: todayISO() }
-            : p
-        ),
-      };
-    });
-  }, []);
+  const respondInterview = useCallback<AppActions["respondInterview"]>(
+    async (proposalId, index) => {
+      const proposal = stateRef.current.interviews.find((p) => p.id === proposalId);
+      if (!proposal || proposal.status !== "propuesta") return fail("Esta propuesta ya fue respondida.");
+      if (index !== null && !proposal.slots[index]) return fail("Elige un horario válido.");
+      const patch = index !== null ? { status: "confirmada", selected_index: index } : { status: "reprogramar", selected_index: null };
+      return mutate("estudiante", "No pudimos enviar tu respuesta. Inténtalo de nuevo.", async (c) =>
+        (await c.from("interview_proposals").update(patch).eq("id", proposalId)).error
+      );
+    },
+    [fail, mutate]
+  );
 
-  const submitReport = useCallback<AppActions["submitReport"]>(async (input) => {
-    // Las funciones de setState se ejecutan después; para responder al instante leemos el estado actual.
-    const current = stateRef.current;
-    if (!current.session) return "error";
-    const reporterId = current.session.userId;
-    const isDuplicate = (reports: Report[]) =>
-      reports.some((r) => r.reporterId === reporterId && r.targetType === input.targetType && r.targetId === input.targetId);
-    if (isDuplicate(current.reports)) return "duplicado";
-    const report: Report = { id: uid("rp"), reporterId, ...input, createdAt: todayISO() };
-    setState((s) => (isDuplicate(s.reports) ? s : { ...s, reports: [...s.reports, report] }));
-    return "ok";
-  }, []);
+  const submitReport = useCallback<AppActions["submitReport"]>(
+    async (input) => {
+      if (!supabase) {
+        fail(MISSING_CONFIG);
+        return "error";
+      }
+      if (!stateRef.current.session) {
+        fail(INVALID_SESSION);
+        return "error";
+      }
+      // reporter_id lo pone la base (auth.uid()); un segundo reporte al mismo objetivo choca con el unique.
+      const { error } = await supabase.from("reports").insert({
+        target_type: input.targetType,
+        target_id: input.targetId,
+        reason: input.reason,
+        description: input.description,
+      });
+      if (error?.code === "23505") return "duplicado";
+      if (error) {
+        fail(dbErrorMessage(error, "No pudimos enviar el reporte. Inténtalo de nuevo."));
+        return "error";
+      }
+      return "ok";
+    },
+    [fail]
+  );
 
   // Recordatorio de periodo: una sola notificación local por estudiante y fecha de fin vencida.
   const session = state.session;

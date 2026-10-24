@@ -4,7 +4,7 @@
 
 App Expo (Android, iOS y web) que conecta a estudiantes universitarios activos y egresados, de cualquier institución, con pequeños negocios. Tiene dos flujos: **vacantes** de medio tiempo (el negocio publica y el estudiante se postula) y **Talento** (el estudiante publica un servicio y el negocio envía una solicitud). Toda la UI y los textos van en español.
 
-Estado: migración a Supabase **por etapas** (ver `docs/SUPABASE.md`). Etapas 1–3 listas: cuentas, perfiles, vacantes, postulaciones, disponibilidad, Talento (servicios, solicitudes, seguimiento) y notificaciones se leen y escriben en Supabase. Etapa 4 (vacantes guardadas, entrevistas y reportes) sigue en memoria. No hay datos semilla: las tablas empiezan **vacías**. `src/data/mock.ts` ya no se usa.
+Estado: conectado a Supabase (ver `docs/SUPABASE.md`, etapas 1–4 listas). Cuentas, perfiles, vacantes, postulaciones, disponibilidad, Talento (servicios, solicitudes, seguimiento), notificaciones, vacantes guardadas, entrevistas y reportes se leen y escriben en Supabase. Lo único local es el recordatorio de fin de periodo. No hay datos semilla: las tablas empiezan **vacías**. `src/data/mock.ts` ya no se usa.
 
 ## Comandos
 

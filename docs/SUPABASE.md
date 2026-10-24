@@ -9,9 +9,11 @@ Guía para crear el proyecto y conectar la app. Las tablas quedan **vacías**: l
 | 1 | Cuentas (registro, inicio y cierre de sesión), perfiles de estudiante y negocio | ✅ Código listo |
 | 2 | Vacantes, postulaciones, disponibilidad y compatibilidad | ✅ Código listo (requiere migraciones 001 y 002) |
 | 3 | Talento, seguimiento de servicios y notificaciones | ✅ Código listo (requiere migraciones 001 y 002) |
-| 4 | Fases A–C: guardadas, alertas, entrevistas, reportes y mapa | Pendiente |
+| 4 | Vacantes guardadas, entrevistas y reportes (alertas, límite semanal y mapa ya se guardaban en el perfil) | ✅ Código listo (requiere migración 003) |
 
-Lo que aún no se migra (Etapa 4: vacantes guardadas, entrevistas y reportes) vive en memoria y se pierde al recargar.
+Todo se guarda en Supabase. Lo único local es el recordatorio de fin de periodo, que la app genera al abrir.
+
+Los reportes solo los lee administración: en el panel, **Table Editor → reports** (o con la clave service_role desde un servidor propio).
 
 ## Migraciones
 
@@ -21,6 +23,7 @@ Si tu proyecto ya tenía `schema.sql`, ejecuta cada archivo de `supabase/migraci
 |---|---|
 | `001_etapas_2_3.sql` | Lecturas que faltaban (vacantes a las que te postulaste, servicios a los que enviaste solicitud) y funciones del servidor que calculan compatibilidad y contacto sin exponer la disponibilidad |
 | `002_perfil_estudiante_privado.sql` | Quita la lectura directa del perfil completo del estudiante por el negocio; solo recibe el perfil público |
+| `003_etapa_4.sql` | Evita el aviso duplicado al proponer una entrevista (las tablas de la Etapa 4 ya venían en `schema.sql`) |
 
 En una instalación nueva no hace falta: `schema.sql` ya incluye todas las migraciones.
 

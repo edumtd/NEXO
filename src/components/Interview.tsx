@@ -117,8 +117,8 @@ export function InterviewProposalForm({
             icon={Send}
             loading={formState.isSubmitting}
             onPress={handleSubmit(async (v) => {
-              await proposeInterview(applicationId, v.slots.map((s) => ({ ...s, place: s.place.trim() })));
-              onDone();
+              const result = await proposeInterview(applicationId, v.slots.map((s) => ({ ...s, place: s.place.trim() })));
+              if (!result.error) onDone();
             })}
           />
         </View>

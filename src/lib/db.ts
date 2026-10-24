@@ -8,7 +8,10 @@ import type {
   BusinessCategory,
   BusinessProfile,
   DayIndex,
+  InterviewProposal,
+  InterviewSlot,
   Role,
+  SavedVacancy,
   ServiceOffer,
   ServiceRequest,
   ServiceUpdate,
@@ -377,12 +380,47 @@ export function publicStudentFromRow(r: PublicStudentRow, email = ""): StudentPr
   };
 }
 
+export interface SavedVacancyRow {
+  student_id: string;
+  vacancy_id: string;
+  created_at: string;
+}
+
+export function savedVacancyFromRow(r: SavedVacancyRow): SavedVacancy {
+  return { studentId: r.student_id, vacancyId: r.vacancy_id, savedAt: r.created_at };
+}
+
+export interface InterviewRow {
+  id: string;
+  application_id: string;
+  /** Mismas claves que InterviewSlot: date, start, end, place. */
+  slots: InterviewSlot[];
+  selected_index: number | null;
+  status: InterviewProposal["status"];
+  created_at: string;
+  updated_at: string;
+}
+
+export function interviewFromRow(r: InterviewRow): InterviewProposal {
+  return {
+    id: r.id,
+    applicationId: r.application_id,
+    slots: r.slots,
+    selectedIndex: r.selected_index ?? undefined,
+    status: r.status,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
 /** Mensaje en español para errores de la base de datos (RLS, validaciones, red). */
 export function dbErrorMessage(error: { message?: string; code?: string } | null | undefined, fallback: string): string {
   const m = (error?.message ?? "").toLowerCase();
   if (error?.code === "23505") return "Ese registro ya existe.";
   if (error?.code === "42501" || m.includes("row-level security")) return "No tienes permiso para hacer esto.";
   if (m.includes("network") || m.includes("fetch")) return "No hay conexión con el servidor. Revisa tu internet.";
+  if (m.includes("ya está cerrada")) return "Esta postulación ya está cerrada.";
+  if (m.includes("cuando se lo piden")) return "Solo puedes proponer nuevos horarios si la persona pidió otros.";
   if (m.includes("transición no permitida") || m.includes("no permitid")) return "Esta acción ya no está disponible para el estado actual.";
   return fallback;
 }
