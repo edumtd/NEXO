@@ -4,6 +4,8 @@ import type {
   BusinessCategory,
   DayIndex,
   EmploymentType,
+  InterviewStatus,
+  ReportReason,
   RatePeriod,
   SalaryPeriod,
   ServiceCategory,
@@ -163,3 +165,19 @@ export const DISCRIMINATORY_TERMS = [
   "complexion",
   "estatura",
 ];
+
+export const INTERVIEW_STATUS_LABELS: Record<InterviewStatus, string> = {
+  propuesta: "Horarios propuestos",
+  confirmada: "Entrevista confirmada",
+  reprogramar: "Pidió otros horarios",
+};
+
+export const REPORT_REASON_LABELS: Record<ReportReason, string> = {
+  informacion_falsa: "Información falsa",
+  discriminacion: "Criterio discriminatorio",
+  cobro_indebido: "Cobro o solicitud indebida",
+  otro: "Otro",
+};
+
+/** Lugar especial para entrevistas a distancia. */
+export const ONLINE_PLACE = "En línea";

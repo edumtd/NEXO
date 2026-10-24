@@ -1,6 +1,7 @@
 import { router, useLocalSearchParams } from "expo-router";
 import {
   BadgeCheck,
+  Bookmark,
   CalendarDays,
   CircleDollarSign,
   Clock,
@@ -11,12 +12,15 @@ import {
   type LucideIcon,
 } from "lucide-react-native";
 import { useState } from "react";
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
 import { BusinessIcon } from "@/components/BusinessIcon";
 import { Screen } from "@/components/Screen";
 import { ApplicationStatusBadge, CompatibilityBadge } from "@/components/StatusBadges";
 import { Badge, Button, Card, EmptyState } from "@/components/ui";
+import { StudentInterviewPanel } from "@/components/Interview";
+import { ReportForm } from "@/components/ReportForm";
+import { LimitBadge } from "@/components/VacancyCard";
 import { useStudentVacancies } from "@/hooks/useStudentVacancies";
 import { CATEGORY_LABELS, DAYS, EMPLOYMENT_TYPE_LABELS } from "@/lib/constants";
 import {
@@ -28,12 +32,13 @@ import {
   hourlyRate,
   weeklyHours,
 } from "@/lib/format";
-import { useApp } from "@/store/AppStore";
+import { useApp, useCurrentStudent } from "@/store/AppStore";
 import { colors } from "@/theme/colors";
 
 export default function VacanteDetalle() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { applyToVacancy } = useApp();
+  const { applyToVacancy, toggleSavedVacancy } = useApp();
+  const { profile, blocks, interviews } = useCurrentStudent();
   const item = useStudentVacancies().find((i) => i.vacancy.id === id);
   const [applying, setApplying] = useState(false);
 
@@ -51,7 +56,8 @@ export default function VacanteDetalle() {
     );
   }
 
-  const { vacancy: v, business, compatibility, application } = item;
+  const { vacancy: v, business, compatibility, application, exceedsLimit, saved } = item;
+  const proposal = application ? interviews.find((p) => p.applicationId === application.id) : undefined;
 
   const apply = async () => {
     setApplying(true);
@@ -64,6 +70,17 @@ export default function VacanteDetalle() {
       back
       title={v.title}
       subtitle={EMPLOYMENT_TYPE_LABELS[v.type]}
+      right={
+        <Pressable
+          onPress={() => toggleSavedVacancy(v.id)}
+          accessibilityRole="button"
+          accessibilityLabel={saved ? "Quitar de guardadas" : "Guardar vacante"}
+          accessibilityState={{ selected: saved }}
+          className="h-10 w-10 items-center justify-center rounded-full bg-white/10 active:bg-white/20"
+        >
+          <Bookmark size={20} color={saved ? colors.coral : colors.white} fill={saved ? colors.coral : "none"} />
+        </Pressable>
+      }
       footer={
         application ? (
           <View className="flex-row items-center justify-between rounded-2xl bg-navy-50 px-4 py-3">
@@ -80,6 +97,12 @@ export default function VacanteDetalle() {
         )
       }
     >
+      {proposal && (
+        <View className="mb-4">
+          <StudentInterviewPanel proposal={proposal} blocks={blocks} />
+        </View>
+      )}
+
       <Card>
         <View className="flex-row items-center gap-3">
           <BusinessIcon category={business?.category ?? "comercio"} size="lg" />
@@ -104,7 +127,10 @@ export default function VacanteDetalle() {
       <Card className="mt-4">
         <View className="mb-3 flex-row items-center justify-between">
           <Text className="text-base font-extrabold text-navy">Compatibilidad</Text>
-          <CompatibilityBadge level={compatibility.level} />
+          <View className="ml-3 flex-1 flex-row flex-wrap justify-end gap-2">
+            <CompatibilityBadge level={compatibility.level} />
+            {exceedsLimit && profile?.maxWeeklyHours ? <LimitBadge hours={profile.maxWeeklyHours} /> : null}
+          </View>
         </View>
         <View className="flex-row gap-1.5">
           {compatibility.days.map((d) => (
@@ -152,6 +178,8 @@ export default function VacanteDetalle() {
       <View className="mt-4">
         <Badge label="Postularte en NEXO no tiene costo" tone="success" />
       </View>
+
+      {business && <ReportForm vacancyId={v.id} businessId={business.id} businessName={business.name} />}
     </Screen>
   );
 }

@@ -4,7 +4,7 @@ import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Logo } from "@/components/Logo";
-import { Button } from "@/components/ui";
+import { Button, LoadingState } from "@/components/ui";
 import { useApp } from "@/store/AppStore";
 import { colors } from "@/theme/colors";
 
@@ -27,9 +27,10 @@ const features: { icon: LucideIcon; title: string; text: string }[] = [
 ];
 
 export default function Welcome() {
-  const { session } = useApp();
+  const { session, authReady } = useApp();
   const insets = useSafeAreaInsets();
 
+  if (!authReady) return <LoadingState message="Cargando tu sesión…" />;
   if (session) return <Redirect href={session.role === "estudiante" ? "/estudiante/inicio" : "/negocio/inicio"} />;
 
   return (

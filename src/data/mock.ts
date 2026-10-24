@@ -5,8 +5,10 @@ import type {
   Application,
   AvailabilityBlock,
   BusinessProfile,
+  InterviewProposal,
   ServiceOffer,
   ServiceRequest,
+  SavedVacancy,
   ServiceUpdate,
   StudentProfile,
   Vacancy,
@@ -22,6 +24,8 @@ export const mockStudents: StudentProfile[] = [
     id: "stu-1",
     fullName: "Carlos Méndez",
     email: "carlos@demo.nexo",
+    maxWeeklyHours: 18,
+    periodEndDate: "2026-12-12",
     career: "Ingeniería en Software",
     university: "Universidad Demo del Centro",
     zone: "Zona Universitaria",
@@ -29,11 +33,13 @@ export const mockStudents: StudentProfile[] = [
     interests: ["cafeteria", "eventos"],
     availabilityPeriod: "Otoño 2026",
     academicStatus: "activo",
+    alertsEnabled: false,
   },
   {
     id: "stu-2",
     fullName: "Ana Sofía Ruiz",
     email: "ana@demo.nexo",
+    periodEndDate: "2026-10-17",
     career: "Diseño Gráfico",
     university: "Instituto Demo de Artes",
     zone: "Centro",
@@ -41,6 +47,7 @@ export const mockStudents: StudentProfile[] = [
     interests: ["restaurante", "comercio"],
     availabilityPeriod: "Otoño 2026",
     academicStatus: "activo",
+    alertsEnabled: false,
   },
   {
     id: "stu-3",
@@ -53,6 +60,7 @@ export const mockStudents: StudentProfile[] = [
     interests: ["restaurante"],
     availabilityPeriod: "Otoño 2026",
     academicStatus: "egresado",
+    alertsEnabled: false,
   },
   {
     id: "stu-4",
@@ -65,6 +73,7 @@ export const mockStudents: StudentProfile[] = [
     interests: ["restaurante", "libreria"],
     availabilityPeriod: "Otoño 2026",
     academicStatus: "activo",
+    alertsEnabled: false,
   },
   {
     id: "stu-5",
@@ -77,6 +86,7 @@ export const mockStudents: StudentProfile[] = [
     interests: ["comercio", "cafeteria"],
     availabilityPeriod: "Otoño 2026",
     academicStatus: "egresado",
+    alertsEnabled: false,
   },
 ];
 
@@ -114,6 +124,8 @@ export const mockBusinesses: BusinessProfile[] = [
     contactPhone: "222 000 0001",
     description: "Pizzería familiar con servicio en mesa y para llevar.",
     verified: false,
+    latitude: 19.4335,
+    longitude: -99.1418,
   },
   {
     id: "biz-2",
@@ -125,6 +137,8 @@ export const mockBusinesses: BusinessProfile[] = [
     contactPhone: "222 000 0002",
     description: "Cafetería de especialidad frente a la biblioteca.",
     verified: true,
+    latitude: 19.4356,
+    longitude: -99.1384,
   },
   {
     id: "biz-3",
@@ -136,6 +150,8 @@ export const mockBusinesses: BusinessProfile[] = [
     contactPhone: "222 000 0003",
     description: "Hamburguesas al carbón, servicio rápido.",
     verified: true,
+    latitude: 19.4262,
+    longitude: -99.1352,
   },
   {
     id: "biz-4",
@@ -147,6 +163,8 @@ export const mockBusinesses: BusinessProfile[] = [
     contactPhone: "222 000 0004",
     description: "Librería independiente con área de lectura.",
     verified: true,
+    latitude: 19.4329,
+    longitude: -99.1331,
   },
   {
     id: "biz-5",
@@ -158,6 +176,8 @@ export const mockBusinesses: BusinessProfile[] = [
     contactPhone: "222 000 0005",
     description: "Organización de congresos, ferias y eventos sociales.",
     verified: true,
+    latitude: 19.4298,
+    longitude: -99.1486,
   },
   {
     id: "biz-6",
@@ -313,6 +333,7 @@ export const mockApplications: Application[] = [
   { id: "ap2", vacancyId: "v2", studentId: "stu-1", status: "recibida", createdAt: "2026-10-06", updatedAt: "2026-10-06" },
   { id: "ap3", vacancyId: "v3", studentId: "stu-2", status: "recibida", createdAt: "2026-10-05", updatedAt: "2026-10-05" },
   { id: "ap4", vacancyId: "v3", studentId: "stu-3", status: "recibida", createdAt: "2026-10-06", updatedAt: "2026-10-06" },
+  { id: "ap6", vacancyId: "v6", studentId: "stu-1", status: "aceptada", createdAt: "2026-10-08", updatedAt: "2026-10-12" },
   { id: "ap5", vacancyId: "v4", studentId: "stu-4", status: "entrevista", createdAt: "2026-10-06", updatedAt: "2026-10-07" },
 ];
 
@@ -527,5 +548,41 @@ export const mockServiceUpdates: ServiceUpdate[] = [
     message: "Logotipo final en PNG y PDF, y menú en tamaño carta listo para imprimir.",
     link: "https://portafolio.demo/ana/pizzeria-roma/final",
     createdAt: "2026-10-19",
+  },
+];
+
+// Vacantes guardadas: privadas de cada estudiante.
+export const mockSavedVacancies: SavedVacancy[] = [
+  { studentId: "stu-1", vacancyId: "v7", savedAt: "2026-10-15" },
+  { studentId: "stu-1", vacancyId: "v2", savedAt: "2026-10-16" },
+];
+
+// Propuestas de entrevista (sin chat): el negocio propone 2–3 horarios y el estudiante elige.
+export const mockInterviews: InterviewProposal[] = [
+  {
+    // Carlos aún debe elegir horario para Barista (Cafetería La Central).
+    id: "iv1",
+    applicationId: "ap1",
+    slots: [
+      { date: "2026-10-28", start: 17 * 60, end: 17 * 60 + 30, place: "Calle 14 Sur 302" },
+      { date: "2026-10-29", start: 12 * 60, end: 12 * 60 + 30, place: "En línea" },
+      { date: "2026-10-30", start: 16 * 60, end: 16 * 60 + 30, place: "Calle 14 Sur 302" },
+    ],
+    status: "propuesta",
+    createdAt: "2026-10-05",
+    updatedAt: "2026-10-05",
+  },
+  {
+    // Valeria ya confirmó su entrevista para Apoyo en caja (Pizzería Roma).
+    id: "iv2",
+    applicationId: "ap5",
+    slots: [
+      { date: "2026-10-27", start: 17 * 60, end: 17 * 60 + 30, place: "Av. Principal 120, local 3" },
+      { date: "2026-10-29", start: 18 * 60, end: 18 * 60 + 30, place: "En línea" },
+    ],
+    selectedIndex: 0,
+    status: "confirmada",
+    createdAt: "2026-10-07",
+    updatedAt: "2026-10-08",
   },
 ];

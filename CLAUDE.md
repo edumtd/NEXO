@@ -4,7 +4,7 @@
 
 App Expo (Android, iOS y web) que conecta a estudiantes universitarios activos y egresados, de cualquier institución, con pequeños negocios. Tiene dos flujos: **vacantes** de medio tiempo (el negocio publica y el estudiante se postula) y **Talento** (el estudiante publica un servicio y el negocio envía una solicitud). Toda la UI y los textos van en español.
 
-Estado: prototipo con datos ficticios en memoria. Supabase está preparado pero **no conectado**.
+Estado: migración a Supabase **por etapas** (ver `docs/SUPABASE.md`). Etapas 1–3 listas: cuentas, perfiles, vacantes, postulaciones, disponibilidad, Talento (servicios, solicitudes, seguimiento) y notificaciones se leen y escriben en Supabase. Etapa 4 (vacantes guardadas, entrevistas y reportes) sigue en memoria. No hay datos semilla: las tablas empiezan **vacías**. `src/data/mock.ts` ya no se usa.
 
 ## Comandos
 
@@ -18,21 +18,27 @@ npx expo export --platform web # build web en dist/ (ignorado por git)
 
 ESLint no está configurado: `npx expo lint`, que pide AGENTS.md, todavía no aplica (por confirmar si se agrega).
 
-Cuentas demo (cualquier contraseña): estudiante `carlos@demo.nexo`, negocio `contacto@pizzeriaroma.demo`.
+Ya no hay cuentas demo: se inicia sesión con cuentas reales de Supabase (requiere `.env`). El perfil se crea solo al registrarse (trigger `handle_new_user`, que lee `role`, `full_name` y `academic_status` de los metadatos del signUp).
+
+Validar el SQL en local antes de ejecutarlo en Supabase: `powershell -ExecutionPolicy Bypass -File supabaselocalprobar-esquema.ps1` (usa PostgreSQL 18 local y simula auth/roles con `supabase/local/supabase-shim.sql`).
 
 ## Arquitectura
 
-- **Estado:** `src/store/AppStore.tsx` es un contexto en memoria, inicializado con `src/data/mock.ts`.
-  - Todas las acciones son `async` a propósito: al conectar Supabase solo cambia este archivo, no las pantallas.
-  - Cada acción valida rol y propiedad (`session.role` y `session.userId`), igual que lo hará la RLS.
+- **Estado:** `src/store/AppStore.tsx` guarda en memoria lo que el usuario puede ver en Supabase (`fetchSnapshot`).
+  - Cada acción migrada usa `mutate()`: escribe en Supabase y luego recarga todo (`refresh`). Devuelve `{ error? }` y, si falla, el error aparece en el aviso global (`ErrorBanner`). Las pantallas que navegan al guardar deben hacerlo solo si no hubo error.
+  - Las notificaciones las crean **triggers del servidor**; el store ya no las fabrica (salvo el recordatorio local de periodo).
+  - Al negocio, la compatibilidad y el correo de estudiantes le llegan ya calculados por funciones del servidor (`business_application_details`, `business_service_request_details`, `visible_public_students`); nunca recibe bloques de disponibilidad.
+  - Los cambios de SQL para proyectos existentes van en `supabase/migraciones/NNN_*.sql` y también al final de `schema.sql`.
 - **Hooks por rol:** existen por privacidad. Las pantallas los usan en lugar de leer `useApp()` directamente.
-  - Estudiante: `useCurrentStudent`, `useStudentVacancies`, `useMyServiceOffers`, `useStudentServiceRequests`.
+  - Estudiante: `useCurrentStudent` (incluye `savedVacancyIds`), `useStudentVacancies` (cada item trae `exceedsLimit`, `saved` y `available`), `useSavedVacancies`, `useStudentWeek` (carga semanal), `useMyServiceOffers`, `useStudentServiceRequests`.
+  - Ambos hooks `useCurrent*` exponen `interviews` (propuestas de entrevista) filtradas a lo propio.
   - Negocio: `useCurrentBusiness`, `useBusinessApplicants`, `useMarketplaceOffers`, `useBusinessServiceRequests`.
   - El negocio solo recibe `PublicStudent` (sin correo ni disponibilidad), mediante `toPublicStudent` en `src/hooks/useServiceOffers.ts`.
 - **Compatibilidad** (`src/lib/compatibility.ts`, sin IA):
   - `evaluateCompatibility` fusiona bloques contiguos y mide qué parte del turno cubre cada día.
   - Resultado: `compatible` (turno completo todos los días), `parcial` o `no_compatible`.
   - Las horas se guardan en **minutos desde 00:00** y los días como `DayIndex` (0 = lunes).
+  - Carga semanal: `studentCommitments` (vacantes aceptadas y servicios presenciales activos), `committedWeeklyHours` y `exceedsWeeklyLimit`. Superar el límite es un aviso aparte (`LimitBadge`); no cambia las 3 etiquetas de compatibilidad.
 - **Validación:** todos los formularios usan esquemas Zod en `src/lib/schemas.ts`.
   - `findDiscriminatoryTerm` bloquea requisitos y textos discriminatorios.
   - `toLines` convierte texto multilínea en listas.
@@ -41,9 +47,17 @@ Cuentas demo (cualquier contraseña): estudiante `carlos@demo.nexo`, negocio `co
   - En web con 768px o más, `useIsWideWeb()` activa `tabBarPosition: "left"` y el layout dibuja `<SideNav />` en lugar de la barra inferior.
   - `inTabBar: false` deja una ruta solo en la barra lateral. `*_HIDDEN_ROUTES` son rutas de detalle que no aparecen en ninguna barra.
 - **Supabase:**
-  - `src/lib/supabase.ts` crea el cliente solo si existen `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_ANON_KEY` (ver `.env.example`). Nada lo importa todavía.
+  - `src/lib/supabase.ts` crea el cliente solo si existen `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_ANON_KEY` (ver `.env.example`). Nunca uses la clave service_role en la app.
+  - Todo el mapeo filas ↔ tipos (snake_case ↔ camelCase) y los mensajes de error de Auth en español están en `src/lib/db.ts`. Las acciones migradas devuelven `{ error?: string }`: las pantallas deben mostrar ese error.
+  - `authReady` (en `useApp()`) es false mientras se restaura la sesión; los layouts muestran LoadingState hasta entonces.
   - `supabase/schema.sql` tiene tablas, RLS y funciones `security definer` que calculan la compatibilidad y exponen el correo sin dar acceso a los bloques.
   - Para cambios de esquema, **agrega al final**; no reescribas lo existente.
+
+## Mapa
+
+- `@/components/BusinessMap` tiene dos implementaciones que Metro elige por plataforma: `BusinessMap.native.tsx` (react-native-maps: Google Maps en Android, Apple Maps en iOS) y `BusinessMap.web.tsx` (Google Maps JS con `@vis.gl/react-google-maps`). `BusinessMap.tsx` solo existe para los tipos; las props compartidas están en `BusinessMap.types.ts`.
+- Claves en `.env` (ver `.env.example`), nunca en el código: `EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY` (web; sin ella se muestra "Mapa no disponible") y `GOOGLE_MAPS_ANDROID_KEY` (builds propios de Android, vía `app.config.ts`). En Expo Go no hacen falta.
+- La ubicación del estudiante solo vive en el estado local de `VacancyMap`; nunca va al store, al almacenamiento ni a Supabase. Distancias en línea recta (`src/lib/geo.ts`); "Cómo llegar" abre la app de mapas externa. NEXO no calcula rutas.
 
 ## Convenciones
 
@@ -65,7 +79,7 @@ Cuentas demo (cualquier contraseña): estudiante `carlos@demo.nexo`, negocio `co
 - Sin criterios discriminatorios. Aplica `findDiscriminatoryTerm` a todo texto libre nuevo que publique un negocio o un estudiante.
 - No mencionar instituciones reales ni una sola universidad. Los datos demo son ficticios.
 - Los bloques de disponibilidad **nunca** se muestran al negocio; solo la etiqueta de compatibilidad. No muestres una vista previa de compatibilidad antes de enviar una solicitud: permitiría adivinar la disponibilidad.
-- El correo del estudiante solo se muestra al negocio en vacantes con estado `entrevista` o `aceptada`, y en Talento con `aceptada` o `completada`.
+- El correo del estudiante solo se muestra al negocio en vacantes con estado `entrevista` o `aceptada`, y en Talento desde `aceptada` (`SERVICE_CONTACT_VISIBLE`).
 - La tarifa de Talento es solo de referencia; el pago se acuerda fuera de NEXO y la UI debe decirlo.
 
 ## Advertencias conocidas
@@ -76,6 +90,7 @@ Cuentas demo (cualquier contraseña): estudiante `carlos@demo.nexo`, negocio `co
 - En web, un `Card` con `onPress` que contiene un `Button` anida `<button>` dentro de `<button>` y causa un error de hidratación. Usa un `Pressable` aparte como enlace.
 - La barra inferior necesita altura explícita (`useTabBarOptions`); sin ella las etiquetas se recortan en web.
 - `npx expo-doctor` puede fallar solo por versiones de parche nuevas de Expo. No es un error del código, y actualizarlas requiere aprobación.
+- Los botones dentro de tarjetas presionables van como **hermanos** posicionados encima (ver el botón de guardar en `VacancyCard`), nunca como hijos.
 - Al renderizar condicionalmente con un número (`arr.length && …`) usa un ternario: en React Native un `0` suelto rompe el render.
 
 ## Agregar una pantalla

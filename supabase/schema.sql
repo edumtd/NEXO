@@ -744,3 +744,371 @@ returns text language sql security definer stable set search_path = public, auth
     and r.business_id = auth.uid()
     and r.status in ('aceptada', 'en_proceso', 'entregada', 'completada');
 $$;
+
+-- ═════════════════════════ Fase A: carga semanal, periodo, guardadas y alertas ═════════════════════════
+-- Todos estos datos son privados del estudiante: la RLS existente de student_profiles
+-- ya impide que otros estudiantes los lean. Los negocios solo leen perfiles de quienes se
+-- postularon (business_has_applicant); la app nunca les muestra estos campos.
+alter table student_profiles
+  add column max_weekly_hours smallint check (max_weekly_hours is null or max_weekly_hours between 1 and 60);
+alter table student_profiles add column period_end_date date;
+alter table student_profiles add column alerts_enabled boolean not null default false;
+
+-- Vacantes guardadas: solo el estudiante dueño las lee y escribe. El negocio no sabe quién guardó.
+create table saved_vacancies (
+  student_id uuid not null references student_profiles (id) on delete cascade,
+  vacancy_id uuid not null references vacancies (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (student_id, vacancy_id)
+);
+alter table saved_vacancies enable row level security;
+create policy "saved_vacancies_all_own" on saved_vacancies for all
+  using (student_id = auth.uid()) with check (student_id = auth.uid());
+
+-- true si los bloques del estudiante cubren el turno completo en todos los días (misma regla que la app).
+-- Nota: asume bloques sin traslape, igual que application_compatibility (la app los fusiona al guardar).
+create or replace function student_covers_shift(s_id uuid, s_days smallint[], s_start smallint, s_end smallint)
+returns boolean language plpgsql security definer stable set search_path = public as $$
+declare
+  d smallint;
+  covered int;
+begin
+  foreach d in array s_days loop
+    select coalesce(sum(greatest(0, least(b.end_minute, s_end) - greatest(b.start_minute, s_start))), 0)
+      into covered
+      from availability_blocks b
+      where b.student_id = s_id and b.day = d;
+    if covered < s_end - s_start then return false; end if;
+  end loop;
+  return true;
+end;
+$$;
+
+-- Alertas: al publicar una vacante activa, avisa a los estudiantes con alertas activadas
+-- para quienes es 100% compatible. El negocio no recibe a quién se notificó.
+create or replace function notify_compatible_students()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.status <> 'activa' then return new; end if;
+  insert into notifications (user_id, kind, link, title, body)
+  select sp.id, 'postulacion', '/estudiante/vacante/' || new.id, 'Nueva vacante compatible',
+         format('%s publicó "%s", compatible con tu disponibilidad.', b.name, new.title)
+  from student_profiles sp
+  join business_profiles b on b.id = new.business_id
+  where sp.alerts_enabled
+    and student_covers_shift(sp.id, new.days, new.start_minute, new.end_minute);
+  return new;
+end;
+$$;
+
+create trigger on_vacancy_insert_alerts
+  after insert on vacancies
+  for each row execute function notify_compatible_students();
+
+-- ═════════════════════════ Fase B: entrevistas sin chat y reportes ═════════════════════════
+
+-- Propuesta de entrevista: el negocio propone 2–3 horarios y el estudiante elige uno o pide otros.
+-- slots = [{ "date": "AAAA-MM-DD", "start": minutos, "end": minutos, "place": "texto" }, ...]
+create table interview_proposals (
+  id uuid primary key default gen_random_uuid(),
+  application_id uuid not null unique references applications (id) on delete cascade,
+  slots jsonb not null check (jsonb_typeof(slots) = 'array' and jsonb_array_length(slots) between 2 and 3),
+  selected_index smallint,
+  status text not null default 'propuesta' check (status in ('propuesta', 'confirmada', 'reprogramar')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check ((status = 'confirmada') = (selected_index is not null))
+);
+
+alter table interview_proposals enable row level security;
+
+create or replace function is_application_student(app_id uuid)
+returns boolean language sql security definer stable set search_path = public as $$
+  select exists (select 1 from applications a where a.id = app_id and a.student_id = auth.uid());
+$$;
+
+create or replace function is_application_business(app_id uuid)
+returns boolean language sql security definer stable set search_path = public as $$
+  select exists (select 1 from applications a where a.id = app_id and is_vacancy_owner(a.vacancy_id));
+$$;
+
+create policy "interviews_select_parties" on interview_proposals for select
+  using (is_application_student(application_id) or is_application_business(application_id));
+create policy "interviews_insert_business" on interview_proposals for insert
+  with check (is_application_business(application_id) and status = 'propuesta' and selected_index is null);
+create policy "interviews_update_parties" on interview_proposals for update
+  using (is_application_student(application_id) or is_application_business(application_id))
+  with check (is_application_student(application_id) or is_application_business(application_id));
+
+-- Valida quién puede hacer cada cambio y notifica a la otra parte. No hay mensajes libres.
+create or replace function on_interview_change()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  app record;
+  v record;
+  b_name text;
+  s_name text;
+  is_business boolean;
+  slot jsonb;
+begin
+  select * into app from applications where id = new.application_id;
+  select * into v from vacancies where id = app.vacancy_id;
+  select name into b_name from business_profiles where id = v.business_id;
+  select full_name into s_name from student_profiles where id = app.student_id;
+  is_business := auth.uid() = v.business_id;
+
+  if tg_op = 'INSERT' then
+    if app.status in ('aceptada', 'rechazada') then raise exception 'La postulación ya está cerrada'; end if;
+    update applications set status = 'entrevista' where id = app.id and status <> 'entrevista';
+    insert into notifications (user_id, kind, link, title, body)
+    values (app.student_id, 'postulacion', '/estudiante/vacante/' || v.id, 'Te proponen una entrevista',
+            format('%s propuso %s horarios para "%s". Elige el que te funcione.', b_name, jsonb_array_length(new.slots), v.title));
+    return new;
+  end if;
+
+  if new.application_id is distinct from old.application_id or new.created_at is distinct from old.created_at then
+    raise exception 'No se puede cambiar la postulación de una propuesta';
+  end if;
+
+  if auth.uid() is null then
+    -- service role (administración)
+    null;
+  elsif is_business then
+    -- Nuevos horarios: solo si el estudiante pidió otros.
+    if not (old.status = 'reprogramar' and new.status = 'propuesta' and new.selected_index is null) then
+      raise exception 'El negocio solo puede proponer nuevos horarios cuando se lo piden';
+    end if;
+    insert into notifications (user_id, kind, link, title, body)
+    values (app.student_id, 'postulacion', '/estudiante/vacante/' || v.id, 'Nuevos horarios de entrevista',
+            format('%s propuso %s horarios nuevos para "%s".', b_name, jsonb_array_length(new.slots), v.title));
+  elsif auth.uid() = app.student_id then
+    if new.slots is distinct from old.slots or old.status <> 'propuesta'
+       or new.status not in ('confirmada', 'reprogramar') then
+      raise exception 'Respuesta de entrevista no permitida';
+    end if;
+    if new.status = 'confirmada' then
+      slot := new.slots -> new.selected_index::int;
+      if slot is null then raise exception 'Horario no válido'; end if;
+      insert into notifications (user_id, kind, link, title, body)
+      values (v.business_id, 'postulacion', '/negocio/postulaciones?vacancy=' || v.id, 'Entrevista confirmada',
+              format('%s eligió el %s (%s) para "%s".', s_name, slot ->> 'date', slot ->> 'place', v.title));
+    else
+      insert into notifications (user_id, kind, link, title, body)
+      values (v.business_id, 'postulacion', '/negocio/postulaciones?vacancy=' || v.id, 'Piden otros horarios',
+              format('%s pidió otros horarios de entrevista para "%s".', s_name, v.title));
+    end if;
+  else
+    raise exception 'No participas en esta entrevista';
+  end if;
+
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+create trigger on_interview_insert
+  after insert on interview_proposals
+  for each row execute function on_interview_change();
+create trigger on_interview_update
+  before update on interview_proposals
+  for each row execute function on_interview_change();
+
+-- Reportes: el usuario solo crea y lee los suyos. Administración usa el service role.
+-- No hay contadores públicos ni efecto automático sobre la vacante o el negocio.
+create table reports (
+  id uuid primary key default gen_random_uuid(),
+  reporter_id uuid not null default auth.uid() references profiles (id) on delete cascade,
+  target_type text not null check (target_type in ('vacante', 'negocio')),
+  target_id uuid not null,
+  reason text not null check (reason in ('informacion_falsa', 'discriminacion', 'cobro_indebido', 'otro')),
+  description text not null check (length(description) between 10 and 500),
+  created_at timestamptz not null default now(),
+  unique (reporter_id, target_type, target_id)
+);
+
+alter table reports enable row level security;
+create policy "reports_insert_own" on reports for insert with check (reporter_id = auth.uid());
+create policy "reports_select_own" on reports for select using (reporter_id = auth.uid());
+-- Sin políticas de UPDATE ni DELETE para usuarios.
+
+-- ═════════════════════════ Fase C: ubicación del negocio en el mapa ═════════════════════════
+-- El propio negocio coloca su pin desde su perfil. Sin pin, el negocio solo aparece en la lista.
+-- business_profiles ya es legible por usuarios autenticados (business_select_auth) y el negocio
+-- solo puede editar su propio perfil (business_update_own), así que no se necesitan políticas nuevas.
+alter table business_profiles
+  add column latitude double precision check (latitude is null or latitude between -90 and 90);
+alter table business_profiles
+  add column longitude double precision check (longitude is null or longitude between -180 and 180);
+alter table business_profiles
+  add constraint business_location_complete check ((latitude is null) = (longitude is null));
+
+-- ═════════════════════════ Etapa 1 Supabase: alta automática de perfiles ═════════════════════════
+-- Al registrarse con supabase.auth.signUp, la app envía en options.data:
+--   { role: 'estudiante' | 'negocio', full_name: text, academic_status?: 'activo' | 'egresado' }
+-- Este trigger crea profiles + student_profiles / business_profiles en el mismo momento, aunque
+-- el usuario aún no tenga sesión (por ejemplo, si el proyecto exige confirmar el correo).
+create or replace function handle_new_user()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  meta jsonb := coalesce(new.raw_user_meta_data, '{}'::jsonb);
+  r text := meta ->> 'role';
+  name text := nullif(trim(coalesce(meta ->> 'full_name', '')), '');
+begin
+  if r not in ('estudiante', 'negocio') then
+    raise exception 'Rol inválido en el registro';
+  end if;
+  if name is null then
+    raise exception 'Falta el nombre en el registro';
+  end if;
+
+  insert into profiles (id, role) values (new.id, r::user_role);
+
+  if r = 'estudiante' then
+    insert into student_profiles (id, full_name, academic_status)
+    values (
+      new.id,
+      name,
+      case when meta ->> 'academic_status' = 'egresado' then 'egresado'::academic_status else 'activo'::academic_status end
+    );
+  else
+    insert into business_profiles (id, name, category) values (new.id, name, 'restaurante');
+  end if;
+  return new;
+end;
+$$;
+
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function handle_new_user();
+
+-- ═════════════════════════ Migración 001 · Etapas 2 y 3 ═════════════════════════
+-- Ejecutar UNA vez en el SQL Editor del proyecto que ya tiene schema.sql.
+-- (El mismo bloque está al final de schema.sql para instalaciones nuevas.)
+--
+-- Agrega lo que la app necesita para leer y escribir vacantes, postulaciones, disponibilidad,
+-- servicios y solicitudes directamente en Supabase, sin exponer datos privados.
+
+-- ── Lecturas que faltaban ──
+
+-- El estudiante sigue viendo una vacante a la que se postuló aunque el negocio la pause o la cierre.
+create policy "vacancies_select_applied" on vacancies for select
+  using (exists (
+    select 1 from applications a
+    where a.vacancy_id = vacancies.id and a.student_id = auth.uid()
+  ));
+
+-- El negocio sigue viendo un servicio al que envió una solicitud aunque el prestador lo pause.
+create policy "service_offers_select_requested" on service_offers for select
+  using (exists (
+    select 1 from service_requests r
+    where r.offer_id = service_offers.id and r.business_id = auth.uid()
+  ));
+
+-- ── Cobertura de un turno (uso interno; NUNCA expuesta por la API) ──
+
+create or replace function shift_coverage(
+  s_id uuid, s_days smallint[], s_start smallint, s_end smallint,
+  out full_days int, out total_days int, out any_cover boolean
+)
+language plpgsql security definer stable set search_path = public as $$
+declare
+  d smallint;
+  covered int;
+begin
+  full_days := 0;
+  total_days := coalesce(array_length(s_days, 1), 0);
+  any_cover := false;
+  if total_days = 0 then return; end if;
+  foreach d in array s_days loop
+    select coalesce(sum(greatest(0, least(b.end_minute, s_end) - greatest(b.start_minute, s_start))), 0)
+      into covered
+      from availability_blocks b
+      where b.student_id = s_id and b.day = d;
+    if covered >= s_end - s_start then full_days := full_days + 1; end if;
+    if covered > 0 then any_cover := true; end if;
+  end loop;
+end;
+$$;
+
+-- Estas funciones leen la disponibilidad de cualquier estudiante: solo deben llamarse desde otras
+-- funciones del servidor, nunca desde la app (si no, un usuario podría adivinar horarios ajenos).
+revoke execute on function shift_coverage(uuid, smallint[], smallint, smallint) from public, anon, authenticated;
+revoke execute on function student_covers_shift(uuid, smallint[], smallint, smallint) from public, anon, authenticated;
+
+-- ── Datos derivados para el negocio (sin exponer disponibilidad) ──
+
+-- Por cada postulación a sus vacantes: compatibilidad calculada en el servidor y el correo del
+-- estudiante SOLO cuando la postulación está en entrevista o aceptada.
+create or replace function business_application_details()
+returns table (application_id uuid, level text, full_days int, total_days int, contact_email text)
+language sql security definer stable set search_path = public, auth as $$
+  select
+    a.id,
+    case
+      when c.total_days > 0 and c.full_days = c.total_days then 'compatible'
+      when c.any_cover then 'parcial'
+      else 'no_compatible'
+    end,
+    c.full_days,
+    c.total_days,
+    case when a.status in ('entrevista', 'aceptada') then u.email::text end
+  from applications a
+  join vacancies v on v.id = a.vacancy_id
+  join auth.users u on u.id = a.student_id
+  cross join lateral shift_coverage(a.student_id, v.days, v.start_minute, v.end_minute) c
+  where v.business_id = auth.uid();
+$$;
+
+-- Por cada solicitud de servicio que envió: compatibilidad del horario propuesto (si tiene) y el
+-- correo del prestador SOLO a partir de que aceptó.
+create or replace function business_service_request_details()
+returns table (request_id uuid, level text, contact_email text)
+language sql security definer stable set search_path = public, auth as $$
+  select
+    r.id,
+    case
+      when r.days is null then null
+      when c.total_days > 0 and c.full_days = c.total_days then 'compatible'
+      when c.any_cover then 'parcial'
+      else 'no_compatible'
+    end,
+    case when r.status in ('aceptada', 'en_proceso', 'entregada', 'completada') then u.email::text end
+  from service_requests r
+  join service_offers o on o.id = r.offer_id
+  join auth.users u on u.id = o.student_id
+  left join lateral shift_coverage(o.student_id, r.days, r.start_minute, r.end_minute) c on r.days is not null
+  where r.business_id = auth.uid();
+$$;
+
+-- Perfil público (sin correo ni disponibilidad) de los estudiantes que el negocio puede ver:
+-- quienes tienen un servicio activo, a quienes les envió una solicitud y quienes se postularon a sus vacantes.
+create or replace function visible_public_students()
+returns table (
+  id uuid, full_name text, career text, university text,
+  zone text, skills text[], academic_status academic_status
+)
+language sql security definer stable set search_path = public as $$
+  select sp.id, sp.full_name, sp.career, sp.university, sp.zone, sp.skills, sp.academic_status
+  from student_profiles sp
+  where is_business() and (
+    exists (select 1 from service_offers o where o.student_id = sp.id and o.status = 'activo')
+    or exists (
+      select 1 from service_requests r join service_offers o on o.id = r.offer_id
+      where o.student_id = sp.id and r.business_id = auth.uid()
+    )
+    or exists (
+      select 1 from applications a join vacancies v on v.id = a.vacancy_id
+      where a.student_id = sp.id and v.business_id = auth.uid()
+    )
+  );
+$$;
+
+-- ═════════════════════════ Migración 002 · Perfil del estudiante privado ═════════════════════════
+-- Ejecutar UNA vez en el SQL Editor, después de 001.
+-- (El mismo bloque está al final de schema.sql para instalaciones nuevas.)
+--
+-- La política original dejaba al negocio leer la fila completa de student_profiles de sus postulantes
+-- (periodo y fecha de fin de disponibilidad, intereses, alertas). El negocio solo debe recibir el perfil
+-- público, que ya obtiene con visible_public_students(); el resto queda solo para el estudiante.
+
+drop policy if exists "student_select_by_business" on student_profiles;

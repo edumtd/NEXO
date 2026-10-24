@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 
 import { toPublicStudent } from "@/hooks/useServiceOffers";
-import { evaluateCompatibility, type CompatibilityResult } from "@/lib/compatibility";
+import { compatibilityFromSummary, type CompatibilityResult } from "@/lib/compatibility";
 import { SERVICE_CONTACT_VISIBLE } from "@/lib/constants";
 import { useApp } from "@/store/AppStore";
 import type { BusinessProfile, PublicStudent, ServiceOffer, ServiceRequest, ServiceUpdate } from "@/types";
@@ -42,7 +42,7 @@ function updatesFor(all: ServiceUpdate[], requestId: string): ServiceUpdate[] {
 
 /** Solicitudes enviadas por el negocio autenticado; primero las que esperan su revisión. */
 export function useBusinessServiceRequests(): BusinessRequestItem[] {
-  const { session, serviceRequests, serviceOffers, serviceUpdates, students, availability } = useApp();
+  const { session, serviceRequests, serviceOffers, serviceUpdates, students, requestInsights } = useApp();
   const id = session?.role === "negocio" ? session.userId : null;
   return useMemo(() => {
     const items: BusinessRequestItem[] = [];
@@ -55,14 +55,12 @@ export function useBusinessServiceRequests(): BusinessRequestItem[] {
         request,
         offer,
         student: toPublicStudent(student),
-        compatibility: hasSchedule(request)
-          ? evaluateCompatibility(availability[student.id] ?? [], {
-              days: request.days!,
-              start: request.start!,
-              end: request.end!,
-            })
-          : null,
-        contactEmail: isContactVisible(request) ? student.email : null,
+        // Calculado en Supabase (business_service_request_details): sin bloques ni correo de más.
+        compatibility:
+          hasSchedule(request) && requestInsights[request.id]?.level
+            ? compatibilityFromSummary(requestInsights[request.id].level!, 0, request.days!)
+            : null,
+        contactEmail: isContactVisible(request) ? requestInsights[request.id]?.contactEmail ?? null : null,
         updates: updatesFor(serviceUpdates, request.id),
       });
     }
@@ -71,7 +69,7 @@ export function useBusinessServiceRequests(): BusinessRequestItem[] {
       (a, b) =>
         priority(a.request) - priority(b.request) || b.request.updatedAt.localeCompare(a.request.updatedAt)
     );
-  }, [id, serviceRequests, serviceOffers, serviceUpdates, students, availability]);
+  }, [id, serviceRequests, serviceOffers, serviceUpdates, students, requestInsights]);
 }
 
 /** Solicitudes recibidas en los servicios del estudiante autenticado; las pendientes primero. */

@@ -24,6 +24,7 @@ import {
   ServiceRequestStatusBadge,
 } from "@/components/StatusBadges";
 import { Avatar, Button, Card, Chip, EmptyState } from "@/components/ui";
+import { InterviewProposalForm, InterviewSummary } from "@/components/Interview";
 import { useBusinessApplicants, type ApplicantItem } from "@/hooks/useBusinessApplicants";
 import { hasSchedule, useBusinessServiceRequests, type BusinessRequestItem } from "@/hooks/useServiceRequests";
 import { formatDate, formatDays, formatRange } from "@/lib/format";
@@ -184,8 +185,13 @@ const ACTIONS: { status: ApplicationStatus; label: string; icon: typeof Check; v
 
 function ApplicantCard({ item }: { item: ApplicantItem }) {
   const { setApplicationStatus } = useApp();
+  const { interviews, profile } = useCurrentBusiness();
   const [pending, setPending] = useState<ApplicationStatus | null>(null);
+  const [proposing, setProposing] = useState(false);
   const { student: s, vacancy: v, application: a, compatibility } = item;
+  const proposal = interviews.find((p) => p.applicationId === a.id);
+  // "Entrevista" abre la propuesta de horarios; se vuelve a habilitar si el estudiante pidió otros.
+  const canPropose = (!proposal || proposal.status === "reprogramar") && a.status !== "aceptada" && a.status !== "rechazada";
   // El contacto se muestra solo cuando el negocio decide avanzar con la persona.
   const showContact = a.status === "entrevista" || a.status === "aceptada";
 
@@ -235,21 +241,36 @@ function ApplicantCard({ item }: { item: ApplicantItem }) {
 
       <Text className="mt-3 text-xs text-ink-soft">Postulación recibida el {formatDate(a.createdAt)}</Text>
 
-      <View className="mt-3 flex-row gap-2">
-        {ACTIONS.map((act) => (
-          <View key={act.status} className="flex-1">
-            <Button
-              title={act.label}
-              size="sm"
-              variant={act.variant}
-              icon={act.icon}
-              disabled={a.status === act.status || pending !== null}
-              loading={pending === act.status}
-              onPress={() => change(act.status)}
-            />
-          </View>
-        ))}
-      </View>
+      {proposal && <InterviewSummary proposal={proposal} />}
+      {proposing && (
+        <InterviewProposalForm
+          applicationId={a.id}
+          defaultPlace={profile?.address ?? ""}
+          onCancel={() => setProposing(false)}
+          onDone={() => setProposing(false)}
+        />
+      )}
+
+      {!proposing && (
+        <View className="mt-3 flex-row gap-2">
+          {ACTIONS.map((act) => {
+            const isInterview = act.status === "entrevista";
+            return (
+              <View key={act.status} className="flex-1">
+                <Button
+                  title={isInterview && proposal?.status === "reprogramar" ? "Nuevos horarios" : act.label}
+                  size="sm"
+                  variant={act.variant}
+                  icon={act.icon}
+                  disabled={(isInterview ? !canPropose : a.status === act.status) || pending !== null}
+                  loading={pending === act.status}
+                  onPress={() => (isInterview ? setProposing(true) : change(act.status))}
+                />
+              </View>
+            );
+          })}
+        </View>
+      )}
     </Card>
   );
 }

@@ -1,14 +1,16 @@
 import { router } from "expo-router";
-import { CalendarClock, Search, UserPen } from "lucide-react-native";
-import { Text, View } from "react-native";
+import { CalendarClock, CalendarRange, ChevronRight, Search, TriangleAlert, UserPen } from "lucide-react-native";
+import { Pressable, Text, View } from "react-native";
 
 import { NotificationBell, NotificationsPanel, useNotificationsToggle } from "@/components/Notifications";
 import { Screen, SectionTitle } from "@/components/Screen";
 import { VacancyCard } from "@/components/VacancyCard";
 import { Avatar, Button, Card, EmptyState, ProgressRing } from "@/components/ui";
 import { useStudentVacancies } from "@/hooks/useStudentVacancies";
+import { useStudentWeek } from "@/hooks/useStudentWeek";
 import { totalWeeklyMinutes } from "@/lib/compatibility";
-import { useCurrentStudent } from "@/store/AppStore";
+import { formatDate, todayISO } from "@/lib/format";
+import { useApp, useCurrentStudent } from "@/store/AppStore";
 import { colors } from "@/theme/colors";
 
 const WEEKLY_HOURS_REFERENCE = 30;
@@ -16,6 +18,8 @@ const WEEKLY_HOURS_REFERENCE = 30;
 export default function EstudianteInicio() {
   const { profile, blocks, applications, notifications } = useCurrentStudent();
   const items = useStudentVacancies();
+  const week = useStudentWeek();
+  const { toggleSavedVacancy } = useApp();
   const { open: showNotifications, toggle: toggleNotifications, unread } = useNotificationsToggle(notifications);
 
   if (!profile) return null;
@@ -23,6 +27,7 @@ export default function EstudianteInicio() {
   const hours = Math.round((totalWeeklyMinutes(blocks) / 60) * 10) / 10;
   const recommended = items.filter((i) => i.compatibility.level !== "no_compatible" && !i.application).slice(0, 3);
   const profileIncomplete = !profile.career || !profile.university || !profile.zone;
+  const periodExpired = !!profile.periodEndDate && todayISO() > profile.periodEndDate;
 
   const count = (s: string) => applications.filter((a) => a.status === s).length;
 
@@ -50,6 +55,23 @@ export default function EstudianteInicio() {
     >
       {showNotifications && <NotificationsPanel notifications={notifications} allHref="/estudiante/notificaciones" />}
 
+      {periodExpired && profile.periodEndDate && (
+        <Pressable
+          onPress={() => router.push("/estudiante/disponibilidad")}
+          accessibilityRole="link"
+          className="mb-4 flex-row items-start gap-3 rounded-3xl bg-amber-50 p-4 active:opacity-80"
+        >
+          <TriangleAlert size={20} color={colors.amber} />
+          <View className="flex-1">
+            <Text className="text-base font-bold text-amber-700">Tu periodo terminó el {formatDate(profile.periodEndDate)}</Text>
+            <Text className="text-sm leading-5 text-amber-700">
+              Actualiza tu disponibilidad para que la compatibilidad siga siendo exacta.
+            </Text>
+          </View>
+          <ChevronRight size={20} color={colors.amber} />
+        </Pressable>
+      )}
+
       <View className="flex-row items-center gap-4 rounded-3xl border border-turquoise-100 bg-turquoise-50 p-5">
         <View className="flex-1">
           <Text className="text-lg font-extrabold leading-6 text-navy">Actualizar disponibilidad semanal</Text>
@@ -68,6 +90,22 @@ export default function EstudianteInicio() {
           <Text className="text-xs text-ink-muted">libres</Text>
         </ProgressRing>
       </View>
+
+      <Card className="mt-4" onPress={() => router.push("/estudiante/mi-semana")} accessibilityLabel="Abrir Mi semana">
+        <View className="flex-row items-center gap-3">
+          <View className="h-11 w-11 items-center justify-center rounded-2xl bg-navy-50">
+            <CalendarRange size={22} color={colors.navy} />
+          </View>
+          <View className="flex-1">
+            <Text className="text-base font-bold text-navy">Mi semana</Text>
+            <Text className="text-sm text-ink-muted">
+              {week.committedHours} h comprometidas
+              {week.remainingHours !== null ? ` · ${week.remainingHours} h restantes de tu límite` : " · sin límite semanal"}
+            </Text>
+          </View>
+          <ChevronRight size={20} color={colors.soft} />
+        </View>
+      </Card>
 
       {profileIncomplete && (
         <Card className="mt-4" onPress={() => router.push("/estudiante/perfil")}>
@@ -110,6 +148,9 @@ export default function EstudianteInicio() {
               vacancy={i.vacancy}
               business={i.business}
               compatibility={i.compatibility.level}
+              exceedsLimitOf={i.exceedsLimit ? profile.maxWeeklyHours : undefined}
+              saved={i.saved}
+              onToggleSave={() => toggleSavedVacancy(i.vacancy.id)}
               onPress={() => router.push(`/estudiante/vacante/${i.vacancy.id}`)}
             />
           ))}

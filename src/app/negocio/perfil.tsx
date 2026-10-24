@@ -6,6 +6,7 @@ import { Controller, useForm } from "react-hook-form";
 import { Text, View } from "react-native";
 
 import { BusinessIcon } from "@/components/BusinessIcon";
+import { BusinessLocationPicker } from "@/components/BusinessLocationPicker";
 import { Screen, SectionTitle } from "@/components/Screen";
 import { Button, Chip, Input } from "@/components/ui";
 import { CATEGORY_LABELS, ZONES } from "@/lib/constants";
@@ -18,6 +19,7 @@ export default function PerfilNegocio() {
   const { updateBusinessProfile, logout } = useApp();
   const { profile } = useCurrentBusiness();
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const {
     control,
     handleSubmit,
@@ -41,7 +43,12 @@ export default function PerfilNegocio() {
   if (!profile) return null;
 
   const onSubmit = async (values: BusinessProfileValues) => {
-    await updateBusinessProfile(values);
+    setSaveError(null);
+    const { error } = await updateBusinessProfile(values);
+    if (error) {
+      setSaveError(error);
+      return;
+    }
     reset(values);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
@@ -76,6 +83,9 @@ export default function PerfilNegocio() {
           </Text>
         </View>
       </View>
+
+      <SectionTitle title="Ubicación en el mapa" />
+      <BusinessLocationPicker profile={profile} />
 
       <SectionTitle title="Datos del negocio" />
       <View className="gap-4">
@@ -151,6 +161,11 @@ export default function PerfilNegocio() {
             />
           )}
         />
+        {saveError && (
+          <Text className="rounded-2xl bg-red-50 p-3 text-sm text-red-700" accessibilityRole="alert">
+            {saveError}
+          </Text>
+        )}
         <Button
           title={saved ? "Perfil guardado ✓" : "Guardar perfil"}
           icon={Save}

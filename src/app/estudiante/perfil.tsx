@@ -1,9 +1,9 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { router } from "expo-router";
-import { BookOpen, CalendarClock, ChevronRight, GraduationCap, LogOut, School, ShieldCheck } from "lucide-react-native";
+import { BellRing, BookOpen, CalendarClock, ChevronRight, Clock, GraduationCap, LogOut, School, ShieldCheck } from "lucide-react-native";
 import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
-import { Text, View } from "react-native";
+import { Switch, Text, View } from "react-native";
 
 import { Screen, SectionTitle } from "@/components/Screen";
 import { TagInput } from "@/components/TagInput";
@@ -21,6 +21,7 @@ export default function PerfilEstudiante() {
   const { updateStudentProfile, logout } = useApp();
   const { profile, blocks } = useCurrentStudent();
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const {
     control,
     handleSubmit,
@@ -36,13 +37,21 @@ export default function PerfilEstudiante() {
       skills: profile?.skills ?? [],
       interests: profile?.interests ?? [],
       academicStatus: profile?.academicStatus ?? "activo",
+      maxWeeklyHours: profile?.maxWeeklyHours ? String(profile.maxWeeklyHours) : "",
+      alertsEnabled: profile?.alertsEnabled ?? false,
     },
   });
 
   if (!profile) return null;
 
   const onSubmit = async (values: StudentProfileValues) => {
-    await updateStudentProfile(values);
+    const { maxWeeklyHours, ...rest } = values;
+    setSaveError(null);
+    const { error } = await updateStudentProfile({ ...rest, maxWeeklyHours: maxWeeklyHours ? Number(maxWeeklyHours) : undefined });
+    if (error) {
+      setSaveError(error);
+      return;
+    }
     reset(values);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
@@ -163,6 +172,50 @@ export default function PerfilEstudiante() {
             </View>
           )}
         />
+        <Controller
+          control={control}
+          name="maxWeeklyHours"
+          render={({ field }) => (
+            <Input
+              label="Límite de horas por semana (opcional)"
+              icon={Clock}
+              placeholder="Ej. 20"
+              keyboardType="number-pad"
+              value={field.value}
+              onChangeText={field.onChange}
+              onBlur={field.onBlur}
+              error={errors.maxWeeklyHours?.message}
+              hint="Te avisaremos cuando una vacante te haga superarlo. Es privado: los negocios no lo ven."
+            />
+          )}
+        />
+        <Controller
+          control={control}
+          name="alertsEnabled"
+          render={({ field }) => (
+            <View className="flex-row items-center gap-3 rounded-2xl border-2 border-navy-100 bg-white p-4">
+              <BellRing size={20} color={colors.navy} />
+              <View className="flex-1">
+                <Text className="text-sm font-bold text-navy">Avisarme de vacantes compatibles</Text>
+                <Text className="text-xs leading-4 text-ink-muted">
+                  Recibirás una notificación cuando se publique una vacante 100% compatible con tu disponibilidad.
+                </Text>
+              </View>
+              <Switch
+                value={field.value}
+                onValueChange={field.onChange}
+                accessibilityLabel="Avisarme de vacantes compatibles"
+                trackColor={{ false: colors.border, true: colors.turquoise }}
+                thumbColor={colors.white}
+              />
+            </View>
+          )}
+        />
+        {saveError && (
+          <Text className="rounded-2xl bg-red-50 p-3 text-sm text-red-700" accessibilityRole="alert">
+            {saveError}
+          </Text>
+        )}
         <Button
           title={saved ? "Perfil guardado ✓" : "Guardar perfil"}
           icon={GraduationCap}

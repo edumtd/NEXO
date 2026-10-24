@@ -1,50 +1,45 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link, router } from "expo-router";
-import { Lock, Mail } from "lucide-react-native";
+import { CircleAlert, Lock, Mail } from "lucide-react-native";
+import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Text, View } from "react-native";
 
-import { RoleSelector } from "@/components/RoleSelector";
 import { Screen } from "@/components/Screen";
 import { Button, Input } from "@/components/ui";
 import { loginSchema, type LoginValues } from "@/lib/schemas";
+import { isSupabaseConfigured } from "@/lib/supabase";
 import { useApp } from "@/store/AppStore";
+import { colors } from "@/theme/colors";
 
 export default function Login() {
   const { login } = useApp();
+  const [formError, setFormError] = useState<string | null>(null);
   const {
     control,
     handleSubmit,
-    setValue,
     formState: { errors, isSubmitting },
   } = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { role: "estudiante", email: "carlos@demo.nexo", password: "demo1234" },
+    defaultValues: { email: "", password: "" },
   });
 
   const onSubmit = async (values: LoginValues) => {
-    await login(values.role, values.email);
-    router.replace(values.role === "estudiante" ? "/estudiante/inicio" : "/negocio/inicio");
+    setFormError(null);
+    // El rol no se elige aquí: sale del perfil de la cuenta.
+    const result = await login(values.email.trim(), values.password);
+    if (result.error || !result.role) {
+      setFormError(result.error ?? "No pudimos iniciar sesión.");
+      return;
+    }
+    router.replace(result.role === "estudiante" ? "/estudiante/inicio" : "/negocio/inicio");
   };
 
   return (
     <Screen back title="Bienvenido de vuelta" subtitle="Inicia sesión para continuar">
-      <Text className="mb-3 text-sm font-semibold text-navy">Entrar como</Text>
-      <Controller
-        control={control}
-        name="role"
-        render={({ field }) => (
-          <RoleSelector
-            value={field.value}
-            onChange={(r) => {
-              field.onChange(r);
-              setValue("email", r === "estudiante" ? "carlos@demo.nexo" : "contacto@pizzeriaroma.demo");
-            }}
-          />
-        )}
-      />
+      {!isSupabaseConfigured && <ErrorBox text="Falta configurar Supabase: crea el archivo .env con la URL y la clave del proyecto (ver .env.example)." />}
 
-      <View className="mt-6 gap-4">
+      <View className="gap-4">
         <Controller
           control={control}
           name="email"
@@ -74,17 +69,13 @@ export default function Login() {
               value={field.value}
               onChangeText={field.onChange}
               onBlur={field.onBlur}
+              onSubmitEditing={handleSubmit(onSubmit)}
               error={errors.password?.message}
             />
           )}
         />
+        {formError && isSupabaseConfigured && <ErrorBox text={formError} />}
         <Button title="Iniciar sesión" size="lg" loading={isSubmitting} onPress={handleSubmit(onSubmit)} />
-      </View>
-
-      <View className="mt-6 rounded-3xl bg-turquoise-50 p-4">
-        <Text className="text-sm leading-5 text-turquoise-700">
-          Modo demostración: cualquier contraseña funciona. Los datos son ficticios y viven solo en esta sesión.
-        </Text>
       </View>
 
       <View className="mt-6 flex-row justify-center">
@@ -94,5 +85,14 @@ export default function Login() {
         </Link>
       </View>
     </Screen>
+  );
+}
+
+function ErrorBox({ text }: { text: string }) {
+  return (
+    <View className="mb-4 flex-row items-start gap-3 rounded-2xl bg-red-50 p-4" accessibilityRole="alert">
+      <CircleAlert size={18} color={colors.danger} />
+      <Text className="flex-1 text-sm leading-5 text-red-700">{text}</Text>
+    </View>
   );
 }

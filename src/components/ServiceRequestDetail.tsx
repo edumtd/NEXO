@@ -441,7 +441,7 @@ function NoteForm({
   submitLabel: string;
   icon: LucideIcon;
   variant?: "outline" | "danger";
-  onSubmit: (note: string) => Promise<void>;
+  onSubmit: (note: string) => Promise<unknown>;
 }) {
   const { control, handleSubmit, reset, formState } = useForm<ServiceNoteValues>({
     resolver: zodResolver(serviceNoteSchema),

@@ -1,6 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link, router } from "expo-router";
-import { Lock, Mail, User } from "lucide-react-native";
+import { CircleAlert, Lock, Mail, MailCheck, User } from "lucide-react-native";
+import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Text, View } from "react-native";
 
@@ -11,6 +12,7 @@ import { Button, Chip, Input } from "@/components/ui";
 import { ACADEMIC_STATUS_LABELS } from "@/lib/constants";
 import { registerSchema, type RegisterValues } from "@/lib/schemas";
 import { useApp } from "@/store/AppStore";
+import { colors } from "@/theme/colors";
 import type { AcademicStatus } from "@/types";
 
 export default function Registro() {
@@ -33,12 +35,46 @@ export default function Registro() {
     },
   });
   const [role, academicStatus] = watch(["role", "academicStatus"]);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [confirmEmail, setConfirmEmail] = useState<string | null>(null);
 
   const onSubmit = async (v: RegisterValues) => {
-    await register(v.role, v.name.trim(), v.email.trim(), v.academicStatus);
+    setFormError(null);
+    const result = await register({
+      role: v.role,
+      name: v.name.trim(),
+      email: v.email.trim(),
+      password: v.password,
+      academicStatus: v.academicStatus,
+    });
+    if (result.error) {
+      setFormError(result.error);
+      return;
+    }
+    if (result.needsConfirmation) {
+      setConfirmEmail(v.email.trim());
+      return;
+    }
     // Tras registrarse, el primer paso es completar el perfil.
     router.replace(v.role === "estudiante" ? "/estudiante/perfil" : "/negocio/perfil");
   };
+
+  if (confirmEmail) {
+    return (
+      <Screen back title="Revisa tu correo" subtitle="Tu cuenta está casi lista">
+        <View className="items-center rounded-3xl bg-white p-6">
+          <MailCheck size={40} color={colors.turquoise600} />
+          <Text className="mt-3 text-center text-base leading-6 text-ink">
+            Te enviamos un enlace de confirmación a <Text className="font-bold">{confirmEmail}</Text>. Ábrelo y después
+            inicia sesión.
+          </Text>
+          <View className="mt-5 w-full">
+            <Button title="Ir a iniciar sesión" onPress={() => router.replace("/login")} />
+          </View>
+        </View>
+      </Screen>
+    );
+  }
 
   return (
     <Screen back title="Crea tu cuenta" subtitle="Gratis para estudiantes. Siempre.">
@@ -142,6 +178,12 @@ export default function Registro() {
               )}
             />
           </>
+        )}
+        {formError && (
+          <View className="flex-row items-start gap-3 rounded-2xl bg-red-50 p-4" accessibilityRole="alert">
+            <CircleAlert size={18} color={colors.danger} />
+            <Text className="flex-1 text-sm leading-5 text-red-700">{formError}</Text>
+          </View>
         )}
         <Button title="Crear cuenta" size="lg" loading={isSubmitting} onPress={handleSubmit(onSubmit)} />
       </View>

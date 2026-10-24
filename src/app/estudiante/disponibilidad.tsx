@@ -9,6 +9,7 @@ import { Button, Card, Chip, EmptyState, Input } from "@/components/ui";
 import { mergeBlocks, totalWeeklyMinutes } from "@/lib/compatibility";
 import { DAYS } from "@/lib/constants";
 import { formatRange, uid } from "@/lib/format";
+import { periodEndSchema } from "@/lib/schemas";
 import { useApp, useCurrentStudent } from "@/store/AppStore";
 import { colors } from "@/theme/colors";
 import type { AvailabilityBlock, DayIndex } from "@/types";
@@ -22,6 +23,8 @@ export default function Disponibilidad() {
   const { profile, blocks: saved } = useCurrentStudent();
   const [blocks, setBlocks] = useState<AvailabilityBlock[]>(saved);
   const [period, setPeriod] = useState(profile?.availabilityPeriod ?? "");
+  const [periodEnd, setPeriodEnd] = useState(profile?.periodEndDate ?? "");
+  const [periodEndError, setPeriodEndError] = useState<string | null>(null);
   const [days, setDays] = useState<DayIndex[]>([]);
   const [start, setStart] = useState(16 * 60);
   const [end, setEnd] = useState(20 * 60);
@@ -43,14 +46,21 @@ export default function Disponibilidad() {
     setBlocks((prev) => prev.filter((b) => !(b.day === day && b.start >= s && b.end <= e)));
 
   const save = async () => {
+    const parsedEnd = periodEndSchema.safeParse(periodEnd);
+    if (!parsedEnd.success) {
+      setPeriodEndError(parsedEnd.error.issues[0]?.message ?? "Fecha no válida");
+      return;
+    }
+    setPeriodEndError(null);
     setSaving(true);
     // Guardamos bloques ya fusionados para evitar traslapes.
     const normalized: AvailabilityBlock[] = DAYS.flatMap(({ value }) =>
       mergeBlocks(blocks, value).map(([s, e]) => ({ id: uid("blk"), day: value, start: s, end: e }))
     );
-    await setAvailability(normalized, period.trim());
+    const result = await setAvailability(normalized, period.trim(), parsedEnd.data);
     setSaving(false);
-    router.back();
+    // Si falló, el aviso global muestra el motivo y la pantalla se queda para reintentar.
+    if (!result.error) router.back();
   };
 
   return (
@@ -80,6 +90,18 @@ export default function Disponibilidad() {
           <Chip key={p} size="sm" label={p} selected={period === p} onPress={() => setPeriod(p)} />
         ))}
       </View>
+      <Input
+        containerClassName="mt-4"
+        label="Fin del periodo"
+        placeholder="AAAA-MM-DD"
+        value={periodEnd}
+        onChangeText={(t) => {
+          setPeriodEnd(t);
+          setPeriodEndError(null);
+        }}
+        error={periodEndError ?? undefined}
+        hint="Te recordaremos actualizar tu disponibilidad cuando termine."
+      />
 
       <SectionTitle title="Agregar bloque" />
       <Card>

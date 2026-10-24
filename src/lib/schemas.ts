@@ -9,7 +9,6 @@ const email = z.email("Ingresa un correo válido");
 const academicStatus = z.enum(["activo", "egresado"]);
 
 export const loginSchema = z.object({
-  role,
   email,
   password: z.string().min(6, "Mínimo 6 caracteres"),
 });
@@ -47,6 +46,12 @@ export const studentProfileSchema = z.object({
   skills: z.array(z.string()).max(10, "Máximo 10 habilidades"),
   interests: z.array(category).min(1, "Elige al menos un interés"),
   academicStatus,
+  /** Vacío = sin límite; si no, entero de 1 a 60. */
+  maxWeeklyHours: z
+    .string()
+    .trim()
+    .refine((s) => s === "" || (/^\d{1,2}$/.test(s) && Number(s) >= 1 && Number(s) <= 60), "Escribe un número de 1 a 60, o déjalo vacío"),
+  alertsEnabled: z.boolean(),
 });
 export type StudentProfileValues = z.infer<typeof studentProfileSchema>;
 
@@ -261,3 +266,44 @@ export const serviceNoteSchema = z
   .object({ note: shortText(10, "Escribe una nota") })
   .superRefine(noDiscrimination(["note"]));
 export type ServiceNoteValues = z.infer<typeof serviceNoteSchema>;
+
+// ───────── Fase A: periodo académico y perfil del estudiante ─────────
+
+/** Fin del periodo: vacío o una fecha AAAA-MM-DD no anterior a hoy. */
+export const periodEndSchema = z
+  .string()
+  .trim()
+  .refine((s) => s === "" || /^\d{4}-\d{2}-\d{2}$/.test(s), "Usa el formato AAAA-MM-DD")
+  .refine((s) => s === "" || !Number.isNaN(Date.parse(s)), "Fecha no válida")
+  .refine((s) => s === "" || s >= todayIso(), "Debe ser hoy o una fecha posterior");
+
+
+// ───────── Fase B: entrevistas y reportes ─────────
+
+const interviewSlotSchema = z
+  .object({
+    date: futureDate,
+    start: z.number(),
+    end: z.number(),
+    place: z.string().trim().min(3, "Escribe el lugar o elige En línea").max(80, "Máximo 80 caracteres"),
+  })
+  .superRefine((v, ctx) => {
+    if (v.end - v.start < 30) {
+      ctx.addIssue({ code: "custom", path: ["end"], message: "La entrevista debe durar al menos 30 min" });
+    }
+    const term = findDiscriminatoryTerm(v.place);
+    if (term) ctx.addIssue({ code: "custom", path: ["place"], message: `Evita criterios discriminatorios ("${term}").` });
+  });
+
+export const interviewProposalSchema = z.object({
+  slots: z.array(interviewSlotSchema).min(2, "Propón al menos 2 horarios").max(3, "Máximo 3 horarios"),
+});
+export type InterviewProposalValues = z.infer<typeof interviewProposalSchema>;
+
+export const reportSchema = z
+  .object({
+    targetType: z.enum(["vacante", "negocio"]),
+    reason: z.enum(["informacion_falsa", "discriminacion", "cobro_indebido", "otro"]),
+    description: z.string().trim().min(10, "Cuéntanos qué pasó (mín. 10 caracteres)").max(500, "Máximo 500 caracteres"),
+  });
+export type ReportValues = z.infer<typeof reportSchema>;

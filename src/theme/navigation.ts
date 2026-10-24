@@ -3,6 +3,7 @@ import {
   Bell,
   Briefcase,
   CalendarClock,
+  CalendarRange,
   ClipboardList,
   Home,
   LayoutDashboard,
@@ -70,6 +71,7 @@ export const STUDENT_LINKS: NavLink[] = [
     match: ["/estudiante/publicar-servicio", "/estudiante/solicitud/"],
   },
   { name: "disponibilidad", href: "/estudiante/disponibilidad", label: "Disponibilidad", icon: CalendarClock, inTabBar: false },
+  { name: "mi-semana", href: "/estudiante/mi-semana", label: "Mi semana", icon: CalendarRange, inTabBar: false },
   { name: "notificaciones", href: "/estudiante/notificaciones", label: "Notificaciones", icon: Bell, inTabBar: false },
   { name: "perfil", href: "/estudiante/perfil", label: "Perfil", icon: User, inTabBar: true },
 ];

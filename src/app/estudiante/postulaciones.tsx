@@ -5,6 +5,7 @@ import { ScrollView, Text, View } from "react-native";
 
 import { BusinessIcon } from "@/components/BusinessIcon";
 import { Screen } from "@/components/Screen";
+import { InterviewHint } from "@/components/Interview";
 import { ApplicationStatusBadge } from "@/components/StatusBadges";
 import { Card, Chip, EmptyState } from "@/components/ui";
 import { APPLICATION_STATUS_LABELS } from "@/lib/constants";
@@ -16,7 +17,7 @@ const STATUSES = Object.keys(APPLICATION_STATUS_LABELS) as ApplicationStatus[];
 
 export default function Postulaciones() {
   const { vacancies, businesses } = useApp();
-  const { applications } = useCurrentStudent();
+  const { applications, interviews } = useCurrentStudent();
   const [filter, setFilter] = useState<ApplicationStatus | null>(null);
 
   const list = applications
@@ -72,6 +73,9 @@ export default function Postulaciones() {
                 <Text className="mt-2 text-xs text-ink-soft">
                   Postulación: {formatDate(a.createdAt)} · Actualizada: {formatDate(a.updatedAt)}
                 </Text>
+                {interviews.find((p) => p.applicationId === a.id) ? (
+                  <InterviewHint proposal={interviews.find((p) => p.applicationId === a.id)!} />
+                ) : null}
                 {v.status !== "activa" && (
                   <Text className="mt-1 text-xs font-semibold text-amber-700">
                     El negocio {v.status === "pausada" ? "pausó" : "cerró"} esta vacante.

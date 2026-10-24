@@ -46,7 +46,20 @@ export interface StudentProfile {
   skills: string[];
   interests: BusinessCategory[];
   availabilityPeriod: string;
+  /** Fin del periodo académico (AAAA-MM-DD). Al pasar, se pide actualizar la disponibilidad. */
+  periodEndDate?: string;
   academicStatus: AcademicStatus;
+  /** Horas máximas por semana que quiere trabajar. Sin valor = sin límite. Privado. */
+  maxWeeklyHours?: number;
+  /** Avisos de vacantes nuevas 100% compatibles. Desactivado por defecto. */
+  alertsEnabled: boolean;
+}
+
+/** Vacante guardada por un estudiante. Privada: el negocio no la ve. */
+export interface SavedVacancy {
+  studentId: string;
+  vacancyId: string;
+  savedAt: string;
 }
 
 /** Datos del estudiante que un negocio puede ver en Talento (sin correo ni disponibilidad). */
@@ -138,6 +151,9 @@ export interface BusinessProfile {
   contactPhone: string;
   description: string;
   verified: boolean;
+  /** Ubicación que el propio negocio coloca en el mapa. Sin pin no aparece en el mapa. */
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface Vacancy {
@@ -186,4 +202,42 @@ export interface AppNotification {
 export interface Session {
   role: Role;
   userId: string;
+}
+
+// ───────── Fase B: entrevistas sin chat y reportes ─────────
+
+export interface InterviewSlot {
+  /** AAAA-MM-DD */
+  date: string;
+  start: number;
+  end: number;
+  /** Dirección corta o "En línea". */
+  place: string;
+}
+
+export type InterviewStatus = "propuesta" | "confirmada" | "reprogramar";
+
+/** Propuesta de entrevista de una postulación: el negocio propone 2–3 horarios y el estudiante elige. */
+export interface InterviewProposal {
+  id: string;
+  applicationId: string;
+  slots: InterviewSlot[];
+  selectedIndex?: number;
+  status: InterviewStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ReportReason = "informacion_falsa" | "discriminacion" | "cobro_indebido" | "otro";
+export type ReportTarget = "vacante" | "negocio";
+
+/** Reporte de seguridad. Solo lo ve administración; no hay contadores públicos. */
+export interface Report {
+  id: string;
+  reporterId: string;
+  targetType: ReportTarget;
+  targetId: string;
+  reason: ReportReason;
+  description: string;
+  createdAt: string;
 }

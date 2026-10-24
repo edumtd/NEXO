@@ -90,7 +90,7 @@ function VacancyForm({
       : null;
 
   const onSubmit = async (v: VacancyValues) => {
-    await saveVacancy(
+    const result = await saveVacancy(
       {
         title: v.title.trim(),
         type: v.type,
@@ -108,7 +108,7 @@ function VacancyForm({
       },
       existing?.id
     );
-    router.replace("/negocio/vacantes");
+    if (!result.error) router.replace("/negocio/vacantes");
   };
 
   return (

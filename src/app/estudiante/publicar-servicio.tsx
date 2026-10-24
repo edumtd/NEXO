@@ -67,7 +67,7 @@ function ServiceForm({ existing, defaultZone }: { existing?: ServiceOffer; defau
   const modality = watch("modality");
 
   const onSubmit = async (v: ServiceOfferValues) => {
-    await saveServiceOffer(
+    const result = await saveServiceOffer(
       {
         title: v.title.trim(),
         category: v.category,
@@ -81,7 +81,7 @@ function ServiceForm({ existing, defaultZone }: { existing?: ServiceOffer; defau
       },
       existing?.id
     );
-    router.replace("/estudiante/servicios");
+    if (!result.error) router.replace("/estudiante/servicios");
   };
 
   return (
