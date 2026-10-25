@@ -1,6 +1,6 @@
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { CalendarPlus, Lock, Plus, X } from "lucide-react-native";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
 import { DayPicker, TimeStepper } from "@/components/Pickers";
@@ -12,15 +12,23 @@ import { formatRange, uid } from "@/lib/format";
 import { periodEndSchema } from "@/lib/schemas";
 import { useApp, useCurrentStudent } from "@/store/AppStore";
 import { colors } from "@/theme/colors";
-import type { AvailabilityBlock, DayIndex } from "@/types";
+import type { AvailabilityBlock, DayIndex, StudentProfile } from "@/types";
 
 const TIMELINE_START = 6 * 60;
 const TIMELINE_END = 24 * 60;
 const PERIOD_SUGGESTIONS = ["Primavera 2027", "Verano 2027", "Otoño 2026", "Intersemestral"];
 
 export default function Disponibilidad() {
+  const { profile, blocks } = useCurrentStudent();
+  const [formKey, setFormKey] = useState(0);
+  // Las pestañas quedan montadas: al enfocar, el formulario se reinicia con lo guardado en Supabase.
+  // Sin esto podría mostrar (y al guardar, reemplazar con) bloques viejos o vacíos.
+  useFocusEffect(useCallback(() => setFormKey((k) => k + 1), []));
+  return <AvailabilityForm key={formKey} profile={profile} saved={blocks} />;
+}
+
+function AvailabilityForm({ profile, saved }: { profile: StudentProfile | null; saved: AvailabilityBlock[] }) {
   const { setAvailability } = useApp();
-  const { profile, blocks: saved } = useCurrentStudent();
   const [blocks, setBlocks] = useState<AvailabilityBlock[]>(saved);
   const [period, setPeriod] = useState(profile?.availabilityPeriod ?? "");
   const [periodEnd, setPeriodEnd] = useState(profile?.periodEndDate ?? "");

@@ -14,6 +14,17 @@ export const loginSchema = z.object({
 });
 export type LoginValues = z.infer<typeof loginSchema>;
 
+export const forgotPasswordSchema = z.object({ email });
+export type ForgotPasswordValues = z.infer<typeof forgotPasswordSchema>;
+
+export const newPasswordSchema = z
+  .object({
+    password: z.string().min(8, "Mínimo 8 caracteres"),
+    confirm: z.string(),
+  })
+  .refine((v) => v.password === v.confirm, { path: ["confirm"], message: "Las contraseñas no coinciden" });
+export type NewPasswordValues = z.infer<typeof newPasswordSchema>;
+
 export const registerSchema = z
   .object({
     role,

@@ -98,6 +98,15 @@ export const BUSINESS_LINKS: NavLink[] = [
 
 export const BUSINESS_HIDDEN_ROUTES = ["talento/[id]", "solicitud/[id]"];
 
+/**
+ * Oculta el botón de una pestaña sin ocultar la pantalla. No uses `href: null`: desde Expo Router 58
+ * marca la pantalla como `hidden` y el router redirige a la primera pestaña al intentar abrirla.
+ */
+export const HIDDEN_TAB_OPTIONS = {
+  tabBarButton: () => null,
+  tabBarItemStyle: { display: "none" },
+} as const;
+
 export const SIDEBAR_BREAKPOINT = 768;
 export const SIDEBAR_WIDTH = 260;
 

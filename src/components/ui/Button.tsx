@@ -6,7 +6,9 @@ import { colors } from "@/theme/colors";
 type Variant = "primary" | "secondary" | "outline" | "ghost" | "danger" | "light";
 type Size = "sm" | "md" | "lg";
 
-interface ButtonProps extends Omit<PressableProps, "children"> {
+interface ButtonProps extends Omit<PressableProps, "children" | "onPress"> {
+  /** Sin evento: así se puede pasar directo handleSubmit(onSubmit) de React Hook Form. */
+  onPress?: () => unknown;
   title: string;
   variant?: Variant;
   size?: Size;
@@ -64,6 +66,7 @@ export function Button({
   fullWidth = true,
   disabled,
   className = "",
+  onPress,
   ...props
 }: ButtonProps) {
   const isDisabled = disabled || loading;
@@ -75,6 +78,7 @@ export function Button({
       className={`flex-row items-center justify-center ${sizeClass[size]} ${containerByVariant[variant]} ${
         fullWidth ? "w-full" : "self-start"
       } ${isDisabled ? "opacity-50" : ""} ${className}`}
+      onPress={onPress ? () => void onPress() : undefined}
       {...props}
     >
       {loading ? (

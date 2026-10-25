@@ -14,7 +14,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { AppState as RNAppState } from "react-native";
+import * as Linking from "expo-linking";
+import { Platform, AppState as RNAppState } from "react-native";
 
 import type { CompatibilityLevel } from "@/lib/compatibility";
 import {
@@ -154,6 +155,12 @@ interface AppActions {
     academicStatus?: AcademicStatus;
   }) => Promise<AuthResult & { needsConfirmation?: boolean }>;
   logout: () => void;
+  /** Envía el correo para restablecer la contraseña. No revela si el correo tiene cuenta. */
+  requestPasswordReset: (email: string) => Promise<ActionResult>;
+  /** Abre la sesión temporal del enlace de recuperación (tokens en el fragmento de la URL). */
+  startPasswordRecovery: (url: string | null) => Promise<ActionResult>;
+  /** Guarda la nueva contraseña y cierra la sesión temporal para entrar de nuevo con ella. */
+  updatePassword: (password: string) => Promise<ActionResult>;
   /** Vuelve a leer de Supabase todo lo que el usuario puede ver. */
   refresh: () => Promise<void>;
   clearError: () => void;
@@ -424,6 +431,49 @@ export function AppProvider({ children }: { children: ReactNode }) {
     userRef.current = null;
     // Limpia todo para que la siguiente cuenta no vea datos de la anterior.
     setState(EMPTY_STATE);
+  }, []);
+
+  // ───────── Recuperar contraseña ─────────
+
+  const requestPasswordReset = useCallback<AppActions["requestPasswordReset"]>(async (email) => {
+    if (!supabase) return { error: MISSING_CONFIG };
+    // La URL debe estar en Authentication → URL Configuration → Redirect URLs de Supabase.
+    const redirectTo =
+      Platform.OS === "web" && typeof window !== "undefined"
+        ? `${window.location.origin}/restablecer`
+        : Linking.createURL("/restablecer");
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+    return error ? { error: authErrorMessage(error) } : {};
+  }, []);
+
+  const startPasswordRecovery = useCallback<AppActions["startPasswordRecovery"]>(async (url) => {
+    if (!supabase) return { error: MISSING_CONFIG };
+    const expired = "El enlace expiró o ya se usó. Solicita uno nuevo.";
+    // Flujo implícito de Supabase: #access_token=…&refresh_token=…&type=recovery, o #error=…
+    const fragment = url?.split("#")[1] ?? "";
+    const query = url?.split("#")[0].split("?")[1] ?? "";
+    const params = new URLSearchParams(fragment || query);
+    if (params.get("error") || params.get("error_description")) return { error: expired };
+    const accessToken = params.get("access_token");
+    const refreshToken = params.get("refresh_token");
+    if (accessToken && refreshToken) {
+      const { error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+      if (error) return { error: authErrorMessage(error) };
+      return {};
+    }
+    // En web, detectSessionInUrl ya leyó y limpió el fragmento al iniciar el cliente.
+    const { data } = await supabase.auth.getSession();
+    return data.session ? {} : { error: expired };
+  }, []);
+
+  const updatePassword = useCallback<AppActions["updatePassword"]>(async (password) => {
+    if (!supabase) return { error: MISSING_CONFIG };
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) return { error: authErrorMessage(error) };
+    await supabase.auth.signOut();
+    userRef.current = null;
+    setState(EMPTY_STATE);
+    return {};
   }, []);
 
   // ───────── Perfiles ─────────
@@ -789,6 +839,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       login,
       register,
       logout,
+      requestPasswordReset,
+      startPasswordRecovery,
+      updatePassword,
       refresh,
       clearError,
       updateStudentProfile,
@@ -822,6 +875,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       login,
       register,
       logout,
+      requestPasswordReset,
+      startPasswordRecovery,
+      updatePassword,
       refresh,
       clearError,
       updateStudentProfile,

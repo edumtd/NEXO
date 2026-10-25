@@ -46,7 +46,9 @@ Validar el SQL en local antes de ejecutarlo en Supabase: `powershell -ExecutionP
   - Los dos `_layout.tsx` generan las pestañas a partir de esas listas.
   - En web con 768px o más, `useIsWideWeb()` activa `tabBarPosition: "left"` y el layout dibuja `<SideNav />` en lugar de la barra inferior.
   - `inTabBar: false` deja una ruta solo en la barra lateral. `*_HIDDEN_ROUTES` son rutas de detalle que no aparecen en ninguna barra.
+  - Para ocultar una pestaña usa `HIDDEN_TAB_OPTIONS`, **nunca** `href: null`: desde Expo Router 58, `href: null` marca la pantalla como oculta y el router redirige a la primera pestaña al abrirla.
 - **Supabase:**
+  - Recuperar contraseña: `/recuperar` envía el enlace (`requestPasswordReset`) y `/restablecer` lo recibe (`startPasswordRecovery` lee los tokens del fragmento de la URL; en web los lee Supabase con `detectSessionInUrl`) y guarda la nueva con `updatePassword`. Requiere las Redirect URLs de `docs/SUPABASE.md`.
   - `src/lib/supabase.ts` crea el cliente solo si existen `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_ANON_KEY` (ver `.env.example`). Nunca uses la clave service_role en la app.
   - Todo el mapeo filas ↔ tipos (snake_case ↔ camelCase) y los mensajes de error de Auth en español están en `src/lib/db.ts`. Las acciones migradas devuelven `{ error?: string }`: las pantallas deben mostrar ese error.
   - `authReady` (en `useApp()`) es false mientras se restaura la sesión; los layouts muestran LoadingState hasta entonces.
@@ -66,6 +68,7 @@ Validar el SQL en local antes de ejecutarlo en Supabase: `powershell -ExecutionP
 - Reutiliza `@/components/ui` (Button, Input, Card, Badge, Chip, Avatar, EmptyState, LoadingState, ProgressRing) y los badges de `src/components/StatusBadges.tsx`.
 - Cada pantalla usa `<Screen>` (`src/components/Screen.tsx`): cabecera navy y hoja redondeada. Acepta `back`, `right`, `header` y `footer`; el contenido ya va centrado a `max-w-[720px]`.
 - Formularios: `useForm` + `zodResolver` + `Controller`. Montos como string en el formulario y `Number()` al guardar.
+  - `Button.onPress` no recibe el evento de toque, así que acepta `handleSubmit(onSubmit)` directo. En `onSubmitEditing` u otros handlers de React Native, envuélvelo: `() => handleSubmit(onSubmit)()` (desde RN 0.88 los tipos del evento no son compatibles).
 - Las pestañas quedan montadas. Los formularios de crear/editar (`?id=`) se reinician con `useFocusEffect` cambiando la `key` (ver `src/app/negocio/publicar-vacante.tsx`).
 - Imports con alias `@/` → `src/`.
 - Avatares con iniciales, nunca fotos.

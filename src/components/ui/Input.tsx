@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react-native";
-import { forwardRef, useState } from "react";
+import { forwardRef, useState, type ComponentRef } from "react";
 import { Text, TextInput, View, type TextInputProps } from "react-native";
 
 import { colors } from "@/theme/colors";
@@ -12,7 +12,7 @@ interface InputProps extends TextInputProps {
   containerClassName?: string;
 }
 
-export const Input = forwardRef<TextInput, InputProps>(function Input(
+export const Input = forwardRef<ComponentRef<typeof TextInput>, InputProps>(function Input(
   { label, error, hint, icon: Icon, multiline, containerClassName = "", onFocus, onBlur, ...props },
   ref
 ) {

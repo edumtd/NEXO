@@ -4,7 +4,7 @@ import { SideNav } from "@/components/SideNav";
 import { tabIcon } from "@/components/TabBarIcon";
 import { LoadingState } from "@/components/ui";
 import { useApp, useCurrentBusiness } from "@/store/AppStore";
-import { BUSINESS_HIDDEN_ROUTES, BUSINESS_LINKS, useIsWideWeb, useTabBarOptions } from "@/theme/navigation";
+import { HIDDEN_TAB_OPTIONS, BUSINESS_HIDDEN_ROUTES, BUSINESS_LINKS, useIsWideWeb, useTabBarOptions } from "@/theme/navigation";
 
 export default function NegocioLayout() {
   const { session, authReady } = useApp();
@@ -39,12 +39,12 @@ export default function NegocioLayout() {
           options={{
             title: link.tabLabel ?? link.label,
             tabBarIcon: tabIcon(link.icon),
-            href: link.inTabBar ? undefined : null,
+            ...(link.inTabBar ? null : HIDDEN_TAB_OPTIONS),
           }}
         />
       ))}
       {BUSINESS_HIDDEN_ROUTES.map((name) => (
-        <Tabs.Screen key={name} name={name} options={{ href: null }} />
+        <Tabs.Screen key={name} name={name} options={HIDDEN_TAB_OPTIONS} />
       ))}
     </Tabs>
   );

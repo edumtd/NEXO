@@ -5,7 +5,7 @@ import { tabIcon } from "@/components/TabBarIcon";
 import { LoadingState } from "@/components/ui";
 import { ACADEMIC_STATUS_LABELS } from "@/lib/constants";
 import { useApp, useCurrentStudent } from "@/store/AppStore";
-import { STUDENT_HIDDEN_ROUTES, STUDENT_LINKS, useIsWideWeb, useTabBarOptions } from "@/theme/navigation";
+import { HIDDEN_TAB_OPTIONS, STUDENT_HIDDEN_ROUTES, STUDENT_LINKS, useIsWideWeb, useTabBarOptions } from "@/theme/navigation";
 
 export default function EstudianteLayout() {
   const { session, authReady } = useApp();
@@ -40,12 +40,12 @@ export default function EstudianteLayout() {
           options={{
             title: link.tabLabel ?? link.label,
             tabBarIcon: tabIcon(link.icon),
-            href: link.inTabBar ? undefined : null,
+            ...(link.inTabBar ? null : HIDDEN_TAB_OPTIONS),
           }}
         />
       ))}
       {STUDENT_HIDDEN_ROUTES.map((name) => (
-        <Tabs.Screen key={name} name={name} options={{ href: null }} />
+        <Tabs.Screen key={name} name={name} options={HIDDEN_TAB_OPTIONS} />
       ))}
     </Tabs>
   );

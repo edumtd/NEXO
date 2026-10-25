@@ -48,6 +48,23 @@ En **Authentication → Sign In / Providers → Email**:
 - **Confirm email**: para desarrollo se recomienda **desactivarlo**, así el registro entra directo. Si lo dejas activo, la app muestra "Revisa tu correo" y la persona inicia sesión después de confirmar.
 - La contraseña mínima de la app es de 8 caracteres en el registro.
 
+### Recuperar contraseña
+
+La app envía el enlace con `resetPasswordForEmail` y lo recibe en la pantalla `/restablecer`. Supabase solo redirige a direcciones permitidas; si la dirección no está en la lista, manda a la *Site URL* y el enlace no funciona.
+
+En **Authentication → URL Configuration → Redirect URLs** agrega:
+
+| Dónde se abre la app | URL |
+|---|---|
+| Web en desarrollo (`npx expo start --web`) | `http://localhost:8081/restablecer` |
+| Expo Go en el teléfono | `exp://**` |
+| Build propio (Android/iOS) | `nexo://restablecer` |
+| Web publicada | `https://TU-DOMINIO/restablecer` |
+
+- La plantilla **Reset Password** (Authentication → Emails) funciona sin cambios.
+- El servicio de correo integrado de Supabase solo entrega a los correos de los miembros del proyecto y tiene un límite muy bajo de envíos por hora. Para usuarios reales configura un SMTP propio en **Authentication → Emails → SMTP Settings**.
+- El enlace se debe abrir en el mismo dispositivo donde está la app.
+
 ## 4. Conectar la app
 
 1. Copia `.env.example` como `.env` en la raíz del proyecto.

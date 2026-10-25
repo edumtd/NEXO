@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Link, router } from "expo-router";
-import { CircleAlert, Lock, Mail } from "lucide-react-native";
+import { Link, router, useLocalSearchParams } from "expo-router";
+import { CircleAlert, CircleCheck, Lock, Mail } from "lucide-react-native";
 import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Text, View } from "react-native";
@@ -14,6 +14,7 @@ import { colors } from "@/theme/colors";
 
 export default function Login() {
   const { login } = useApp();
+  const { restablecida } = useLocalSearchParams<{ restablecida?: string }>();
   const [formError, setFormError] = useState<string | null>(null);
   const {
     control,
@@ -38,6 +39,13 @@ export default function Login() {
   return (
     <Screen back title="Bienvenido de vuelta" subtitle="Inicia sesión para continuar">
       {!isSupabaseConfigured && <ErrorBox text="Falta configurar Supabase: crea el archivo .env con la URL y la clave del proyecto (ver .env.example)." />}
+
+      {restablecida === "1" && (
+        <View className="mb-4 flex-row items-start gap-3 rounded-2xl bg-turquoise-50 p-4" accessibilityRole="alert">
+          <CircleCheck size={18} color={colors.turquoise600} />
+          <Text className="flex-1 text-sm leading-5 text-turquoise-700">Contraseña actualizada. Inicia sesión con la nueva.</Text>
+        </View>
+      )}
 
       <View className="gap-4">
         <Controller
@@ -69,11 +77,14 @@ export default function Login() {
               value={field.value}
               onChangeText={field.onChange}
               onBlur={field.onBlur}
-              onSubmitEditing={handleSubmit(onSubmit)}
+              onSubmitEditing={() => handleSubmit(onSubmit)()}
               error={errors.password?.message}
             />
           )}
         />
+        <Link href="/recuperar" className="self-end">
+          <Text className="text-sm font-bold text-coral">¿Olvidaste tu contraseña?</Text>
+        </Link>
         {formError && isSupabaseConfigured && <ErrorBox text={formError} />}
         <Button title="Iniciar sesión" size="lg" loading={isSubmitting} onPress={handleSubmit(onSubmit)} />
       </View>

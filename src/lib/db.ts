@@ -130,6 +130,11 @@ export function authErrorMessage(error: { message?: string; code?: string } | nu
   if (m.includes("already registered") || m.includes("already been registered")) return "Ya existe una cuenta con ese correo.";
   if (m.includes("password") && m.includes("characters")) return "La contraseña es demasiado corta.";
   if (m.includes("rate limit")) return "Demasiados intentos. Espera un momento e inténtalo de nuevo.";
+  if (m.includes("different from the old password") || m.includes("same password"))
+    return "La nueva contraseña debe ser distinta de la anterior.";
+  if (m.includes("weak") || m.includes("pwned")) return "Esa contraseña es muy fácil de adivinar. Elige otra.";
+  if (m.includes("expired") || m.includes("invalid") || m.includes("session missing") || m.includes("refresh token"))
+    return "El enlace expiró o ya se usó. Solicita uno nuevo.";
   if (m.includes("network") || m.includes("fetch")) return "No hay conexión con el servidor. Revisa tu internet.";
   return "Ocurrió un error inesperado. Inténtalo de nuevo.";
 }
