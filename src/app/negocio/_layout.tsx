@@ -4,7 +4,7 @@ import { SideNav } from "@/components/SideNav";
 import { tabIcon } from "@/components/TabBarIcon";
 import { LoadingState } from "@/components/ui";
 import { useApp, useCurrentBusiness } from "@/store/AppStore";
-import { HIDDEN_TAB_OPTIONS, BUSINESS_HIDDEN_ROUTES, BUSINESS_LINKS, useIsWideWeb, useTabBarOptions } from "@/theme/navigation";
+import { HIDDEN_TAB_OPTIONS, homeFor, BUSINESS_HIDDEN_ROUTES, BUSINESS_LINKS, useIsWideWeb, useTabBarOptions } from "@/theme/navigation";
 
 export default function NegocioLayout() {
   const { session, authReady } = useApp();
@@ -14,7 +14,7 @@ export default function NegocioLayout() {
   const wide = useIsWideWeb();
   if (!authReady) return <LoadingState message="Cargando tu sesión…" />;
   if (!session) return <Redirect href="/" />;
-  if (session.role !== "negocio") return <Redirect href="/estudiante/inicio" />;
+  if (session.role !== "negocio") return <Redirect href={homeFor(session.role)} />;
 
   return (
     <Tabs

@@ -2,6 +2,8 @@
 // Mantener aquí todo el mapeo: AppStore no debe conocer nombres de columnas.
 import type {
   AcademicStatus,
+  AdminAction,
+  AdminReport,
   AppNotification,
   Application,
   AvailabilityBlock,
@@ -418,6 +420,68 @@ export function interviewFromRow(r: InterviewRow): InterviewProposal {
   };
 }
 
+// ───────── Panel de administración ─────────
+
+export interface AdminReportRow {
+  id: string;
+  target_type: AdminReport["targetType"];
+  target_id: string;
+  reason: AdminReport["reason"];
+  description: string;
+  status: AdminReport["status"];
+  admin_note: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  target_title: string | null;
+  target_status: AdminReport["targetStatus"] | null;
+  owner_id: string | null;
+  owner_name: string | null;
+  owner_verified: boolean | null;
+  target_report_count: number;
+}
+
+export function adminReportFromRow(r: AdminReportRow): AdminReport {
+  return {
+    id: r.id,
+    targetType: r.target_type,
+    targetId: r.target_id,
+    reason: r.reason,
+    description: r.description,
+    status: r.status,
+    adminNote: r.admin_note ?? undefined,
+    reviewedAt: r.reviewed_at ?? undefined,
+    createdAt: r.created_at,
+    targetTitle: r.target_title ?? undefined,
+    targetStatus: r.target_status ?? undefined,
+    ownerId: r.owner_id ?? undefined,
+    ownerName: r.owner_name ?? undefined,
+    ownerVerified: r.owner_verified ?? false,
+    targetReportCount: r.target_report_count,
+  };
+}
+
+export interface AdminActionRow {
+  id: string;
+  admin_email: string | null;
+  action: AdminAction["action"];
+  target_type: AdminAction["targetType"];
+  target_id: string;
+  note: string | null;
+  created_at: string;
+}
+
+export function adminActionFromRow(r: AdminActionRow): AdminAction {
+  return {
+    id: r.id,
+    adminEmail: r.admin_email ?? undefined,
+    action: r.action,
+    targetType: r.target_type,
+    targetId: r.target_id,
+    note: r.note ?? undefined,
+    createdAt: r.created_at,
+  };
+}
+
 /** Mensaje en español para errores de la base de datos (RLS, validaciones, red). */
 export function dbErrorMessage(error: { message?: string; code?: string } | null | undefined, fallback: string): string {
   const m = (error?.message ?? "").toLowerCase();
@@ -425,6 +489,10 @@ export function dbErrorMessage(error: { message?: string; code?: string } | null
   if (error?.code === "42501" || m.includes("row-level security")) return "No tienes permiso para hacer esto.";
   if (m.includes("network") || m.includes("fetch")) return "No hay conexión con el servidor. Revisa tu internet.";
   if (m.includes("ya está cerrada")) return "Esta postulación ya está cerrada.";
+  if (m.includes("solo administración")) return "Solo administración puede hacer esto.";
+  if (m.includes("al menos 10 caracteres")) return "El motivo debe tener al menos 10 caracteres.";
+  if (m.includes("no está verificado")) return "Ese negocio no está verificado.";
+  if (m.includes("no encontrad")) return "No encontramos ese registro; puede que ya no exista.";
   if (m.includes("cuando se lo piden")) return "Solo puedes proponer nuevos horarios si la persona pidió otros.";
   if (m.includes("transición no permitida") || m.includes("no permitid")) return "Esta acción ya no está disponible para el estado actual.";
   return fallback;

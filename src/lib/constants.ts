@@ -1,11 +1,14 @@
 import type {
   AcademicStatus,
+  AdminActionKind,
   ApplicationStatus,
   BusinessCategory,
   DayIndex,
   EmploymentType,
   InterviewStatus,
   ReportReason,
+  ReportStatus,
+  ReportTarget,
   RatePeriod,
   SalaryPeriod,
   ServiceCategory,
@@ -203,6 +206,26 @@ export const REPORT_REASON_LABELS: Record<ReportReason, string> = {
   discriminacion: "Criterio discriminatorio",
   cobro_indebido: "Cobro o solicitud indebida",
   otro: "Otro",
+};
+
+export const REPORT_STATUS_LABELS: Record<ReportStatus, string> = {
+  nuevo: "Nuevo",
+  en_revision: "En revisión",
+  resuelto: "Resuelto",
+  descartado: "Descartado",
+};
+
+export const REPORT_TARGET_LABELS: Record<ReportTarget, string> = {
+  vacante: "Vacante",
+  negocio: "Negocio",
+};
+
+export const ADMIN_ACTION_LABELS: Record<AdminActionKind, string> = {
+  reporte_estado: "Cambio de estado de reporte",
+  vacante_pausada: "Vacante pausada",
+  vacante_cerrada: "Vacante cerrada",
+  servicio_pausado: "Servicio pausado",
+  verificacion_retirada: "Verificación retirada",
 };
 
 /** Lugar especial para entrevistas a distancia. */

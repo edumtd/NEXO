@@ -11,6 +11,7 @@ import { loginSchema, type LoginValues } from "@/lib/schemas";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { useApp } from "@/store/AppStore";
 import { colors } from "@/theme/colors";
+import { homeFor } from "@/theme/navigation";
 
 export default function Login() {
   const { login } = useApp();
@@ -33,7 +34,7 @@ export default function Login() {
       setFormError(result.error ?? "No pudimos iniciar sesión.");
       return;
     }
-    router.replace(result.role === "estudiante" ? "/estudiante/inicio" : "/negocio/inicio");
+    router.replace(homeFor(result.role));
   };
 
   return (

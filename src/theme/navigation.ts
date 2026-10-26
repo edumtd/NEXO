@@ -8,6 +8,8 @@ import {
   Home,
   LayoutDashboard,
   CirclePlus,
+  Flag,
+  ScrollText,
   Search,
   Sparkles,
   Store,
@@ -20,6 +22,7 @@ import { Platform, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { colors } from "./colors";
+import type { SessionRole } from "@/types";
 
 type TabsScreenOptions = Exclude<
   NonNullable<ComponentProps<typeof Tabs>["screenOptions"]>,
@@ -106,6 +109,18 @@ export const HIDDEN_TAB_OPTIONS = {
   tabBarButton: () => null,
   tabBarItemStyle: { display: "none" },
 } as const;
+
+/** Panel de administración: solo web ancha. No forma parte de la navegación de estudiantes ni negocios. */
+export const ADMIN_LINKS: NavLink[] = [
+  { name: "reportes", href: "/admin/reportes", label: "Reportes", icon: Flag, inTabBar: false, match: ["/admin/reporte/"] },
+  { name: "bitacora", href: "/admin/bitacora", label: "Bitácora", icon: ScrollText, inTabBar: false },
+];
+
+/** Pantalla de inicio de cada tipo de sesión. */
+export function homeFor(role: SessionRole): Href {
+  if (role === "admin") return "/admin/reportes";
+  return role === "estudiante" ? "/estudiante/inicio" : "/negocio/inicio";
+}
 
 export const SIDEBAR_BREAKPOINT = 768;
 export const SIDEBAR_WIDTH = 260;

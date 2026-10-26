@@ -199,8 +199,11 @@ export interface AppNotification {
   read: boolean;
 }
 
+/** "admin" no es un rol de la base: sale de la tabla admins (función is_admin()) y nunca del registro. */
+export type SessionRole = Role | "admin";
+
 export interface Session {
-  role: Role;
+  role: SessionRole;
   userId: string;
 }
 
@@ -239,5 +242,42 @@ export interface Report {
   targetId: string;
   reason: ReportReason;
   description: string;
+  createdAt: string;
+}
+
+// ───────── Panel de administración ─────────
+
+export type ReportStatus = "nuevo" | "en_revision" | "resuelto" | "descartado";
+
+/** Reporte visto por administración, con un resumen del objetivo reportado. */
+export interface AdminReport {
+  id: string;
+  targetType: ReportTarget;
+  targetId: string;
+  reason: ReportReason;
+  description: string;
+  status: ReportStatus;
+  adminNote?: string;
+  reviewedAt?: string;
+  createdAt: string;
+  targetTitle?: string;
+  /** Estado de la vacante reportada (solo para target vacante). */
+  targetStatus?: VacancyStatus;
+  ownerId?: string;
+  ownerName?: string;
+  ownerVerified: boolean;
+  /** Cuántos reportes acumula el mismo objetivo. Solo lo ve administración. */
+  targetReportCount: number;
+}
+
+export type AdminActionKind = "reporte_estado" | "vacante_pausada" | "vacante_cerrada" | "servicio_pausado" | "verificacion_retirada";
+
+export interface AdminAction {
+  id: string;
+  adminEmail?: string;
+  action: AdminActionKind;
+  targetType: "reporte" | "vacante" | "servicio" | "negocio";
+  targetId: string;
+  note?: string;
   createdAt: string;
 }

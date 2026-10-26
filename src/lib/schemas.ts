@@ -318,3 +318,17 @@ export const reportSchema = z
     description: z.string().trim().min(10, "Cuéntanos qué pasó (mín. 10 caracteres)").max(500, "Máximo 500 caracteres"),
   });
 export type ReportValues = z.infer<typeof reportSchema>;
+
+// ───────── Panel de administración ─────────
+
+export const adminReviewSchema = z.object({
+  status: z.enum(["nuevo", "en_revision", "resuelto", "descartado"]),
+  note: z.string().trim().max(1000, "Máximo 1000 caracteres"),
+});
+export type AdminReviewValues = z.infer<typeof adminReviewSchema>;
+
+/** Motivo de una acción de moderación: el dueño afectado lo recibe en su notificación. */
+export const adminReasonSchema = z.object({
+  reason: z.string().trim().min(10, "Explica el motivo (mínimo 10 caracteres)").max(300, "Máximo 300 caracteres"),
+});
+export type AdminReasonValues = z.infer<typeof adminReasonSchema>;

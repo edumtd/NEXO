@@ -19,6 +19,8 @@ import { Platform, AppState as RNAppState } from "react-native";
 
 import type { CompatibilityLevel } from "@/lib/compatibility";
 import {
+  adminActionFromRow,
+  adminReportFromRow,
   applicationFromRow,
   authErrorMessage,
   availabilityFromRow,
@@ -37,6 +39,8 @@ import {
   studentPatchToRow,
   vacancyFromRow,
   vacancyInputToRow,
+  type AdminActionRow,
+  type AdminReportRow,
   type ApplicationRow,
   type AvailabilityRow,
   type BusinessRow,
@@ -55,6 +59,8 @@ import { formatDate, todayISO } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
 import type {
   AcademicStatus,
+  AdminAction,
+  AdminReport,
   AppNotification,
   Application,
   ApplicationStatus,
@@ -69,7 +75,9 @@ import type {
   ServiceOfferStatus,
   ServiceRequest,
   ServiceUpdate,
+  ReportStatus,
   Session,
+  SessionRole,
   StudentProfile,
   Vacancy,
   VacancyStatus,
@@ -85,7 +93,7 @@ export interface ActionResult {
 }
 
 export interface AuthResult {
-  role?: Role;
+  role?: SessionRole;
   error?: string;
 }
 
@@ -121,6 +129,9 @@ interface AppState {
   savedVacancies: SavedVacancy[];
   /** Propuestas de entrevista de las postulaciones que el usuario puede ver. */
   interviews: InterviewProposal[];
+  /** Solo para administración (vacío para estudiantes y negocios). */
+  adminReports: AdminReport[];
+  adminActions: AdminAction[];
   /** Último error de una acción, para el aviso global. */
   lastError: string | null;
 }
@@ -140,6 +151,8 @@ const EMPTY_STATE: AppState = {
   requestInsights: {},
   savedVacancies: [],
   interviews: [],
+  adminReports: [],
+  adminActions: [],
   lastError: null,
 };
 
@@ -193,6 +206,11 @@ interface AppActions {
   proposeInterview: (applicationId: string, slots: InterviewSlot[]) => Promise<ActionResult>;
   /** El estudiante elige un horario (índice) o pide otros (null). */
   respondInterview: (proposalId: string, index: number | null) => Promise<ActionResult>;
+  // Administración: todo pasa por funciones del servidor que comprueban is_admin().
+  adminUpdateReport: (reportId: string, status: ReportStatus, note: string) => Promise<ActionResult>;
+  adminSetVacancyStatus: (vacancyId: string, status: "pausada" | "cerrada", reason: string) => Promise<ActionResult>;
+  adminPauseOffer: (offerId: string, reason: string) => Promise<ActionResult>;
+  adminRevokeVerification: (businessId: string, reason: string) => Promise<ActionResult>;
   /** Un reporte por usuario y objetivo; solo lo lee administración. */
   submitReport: (input: Pick<Report, "targetType" | "targetId" | "reason" | "description">) => Promise<"ok" | "duplicado" | "error">;
 }
@@ -211,6 +229,22 @@ const AppContext = createContext<AppContextValue | null>(null);
 
 /** Lee de Supabase todo lo que el usuario puede ver según su rol (la RLS filtra las filas). */
 async function fetchSnapshot(client: SupabaseClient, user: User): Promise<Partial<AppState> | null> {
+  // Administración: no tiene perfil de estudiante ni de negocio (ver docs/SUPABASE.md).
+  const { data: isAdmin, error: adminError } = await client.rpc("is_admin");
+  // PGRST202: la migración 004 aún no se ejecuta; nadie es administrador todavía.
+  if (adminError && adminError.code !== "PGRST202") throw adminError;
+  if (isAdmin === true) {
+    const [reports, actions] = await Promise.all([client.rpc("admin_reports"), client.rpc("admin_action_log")]);
+    const adminRpcError = reports.error ?? actions.error;
+    if (adminRpcError) throw adminRpcError;
+    return {
+      ...EMPTY_STATE,
+      session: { role: "admin", userId: user.id },
+      adminReports: ((reports.data as AdminReportRow[] | null) ?? []).map(adminReportFromRow),
+      adminActions: ((actions.data as AdminActionRow[] | null) ?? []).map(adminActionFromRow),
+    };
+  }
+
   const { data: prof, error: profError } = await client
     .from("profiles")
     .select("id, role")
@@ -247,6 +281,8 @@ async function fetchSnapshot(client: SupabaseClient, user: User): Promise<Partia
     serviceRequests: (requests.data ?? []).map(serviceRequestFromRow),
     serviceUpdates: (updates.data ?? []).map(serviceUpdateFromRow),
     interviews: (interviews.data ?? []).map(interviewFromRow),
+    adminReports: [],
+    adminActions: [],
   };
 
   if (prof.role === "estudiante") {
@@ -320,7 +356,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const clearError = useCallback(() => setState((s) => ({ ...s, lastError: null })), []);
 
   /** Carga todo lo visible para el usuario. Devuelve su rol o null si no tiene perfil. */
-  const loadAll = useCallback(async (user: User): Promise<Role | null> => {
+  const loadAll = useCallback(async (user: User): Promise<SessionRole | null> => {
     if (!supabase) return null;
     try {
       const snapshot = await fetchSnapshot(supabase, user);
@@ -349,7 +385,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
    */
   const mutate = useCallback(
     async (
-      role: Role | null,
+      role: SessionRole | null,
       fallback: string,
       write: (client: SupabaseClient, userId: string) => Promise<DbError>
     ): Promise<ActionResult> => {
@@ -711,7 +747,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const cancelServiceRequest = useCallback<AppActions["cancelServiceRequest"]>(
     (id, reason) => {
       const role = stateRef.current.session?.role;
-      if (!role) return Promise.resolve(fail(INVALID_SESSION));
+      if (!role || role === "admin") return Promise.resolve(fail(INVALID_SESSION));
       return updateRequest(role, id, { status: "cancelada", cancel_reason: reason, cancelled_by: role }, "No pudimos cancelar la solicitud.");
     },
     [fail, updateRequest]
@@ -807,6 +843,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [fail]
   );
 
+  // ───────── Administración ─────────
+
+  const adminUpdateReport = useCallback<AppActions["adminUpdateReport"]>(
+    (reportId, status, note) =>
+      mutate("admin", "No pudimos guardar la revisión del reporte.", async (c) =>
+        (await c.rpc("admin_update_report", { p_report_id: reportId, p_status: status, p_note: note })).error
+      ),
+    [mutate]
+  );
+
+  const adminSetVacancyStatus = useCallback<AppActions["adminSetVacancyStatus"]>(
+    (vacancyId, status, reason) =>
+      mutate("admin", "No pudimos cambiar el estado de la vacante.", async (c) =>
+        (await c.rpc("admin_set_vacancy_status", { p_vacancy_id: vacancyId, p_status: status, p_reason: reason })).error
+      ),
+    [mutate]
+  );
+
+  const adminPauseOffer = useCallback<AppActions["adminPauseOffer"]>(
+    (offerId, reason) =>
+      mutate("admin", "No pudimos pausar el servicio.", async (c) =>
+        (await c.rpc("admin_pause_offer", { p_offer_id: offerId, p_reason: reason })).error
+      ),
+    [mutate]
+  );
+
+  const adminRevokeVerification = useCallback<AppActions["adminRevokeVerification"]>(
+    (businessId, reason) =>
+      mutate("admin", "No pudimos retirar la verificación.", async (c) =>
+        (await c.rpc("admin_revoke_verification", { p_business_id: businessId, p_reason: reason })).error
+      ),
+    [mutate]
+  );
+
   // Recordatorio de periodo: una sola notificación local por estudiante y fecha de fin vencida.
   const session = state.session;
   const sessionStudent =
@@ -868,6 +938,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       proposeInterview,
       respondInterview,
       submitReport,
+      adminUpdateReport,
+      adminSetVacancyStatus,
+      adminPauseOffer,
+      adminRevokeVerification,
     }),
     [
       state,
@@ -904,6 +978,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       proposeInterview,
       respondInterview,
       submitReport,
+      adminUpdateReport,
+      adminSetVacancyStatus,
+      adminPauseOffer,
+      adminRevokeVerification,
     ]
   );
 
@@ -958,4 +1036,18 @@ export function useCurrentBusiness() {
       interviews: interviews.filter((p) => received.some((a) => a.id === p.applicationId)),
     };
   }, [id, businesses, vacancies, applications, students, notifications, interviews, applicationInsights]);
+}
+
+/** Datos del panel de administración. Vacío si la sesión no es de administración. */
+export function useAdmin() {
+  const { session, adminReports, adminActions } = useApp();
+  const isAdmin = session?.role === "admin";
+  return useMemo(
+    () => ({
+      isAdmin,
+      reports: isAdmin ? adminReports : [],
+      actions: isAdmin ? adminActions : [],
+    }),
+    [isAdmin, adminReports, adminActions]
+  );
 }

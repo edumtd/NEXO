@@ -55,6 +55,13 @@ Validar el SQL en local antes de ejecutarlo en Supabase: `powershell -ExecutionP
   - `supabase/schema.sql` tiene tablas, RLS y funciones `security definer` que calculan la compatibilidad y exponen el correo sin dar acceso a los bloques.
   - Para cambios de esquema, **agrega al final**; no reescribas lo existente.
 
+## Panel de administración
+
+- Rutas en `src/app/admin/` (solo web ≥768px; en pantallas angostas muestra "Abre el panel desde una computadora"). Navegación con `ADMIN_LINKS` y `<SideNav />`; nunca en `STUDENT_LINKS` ni `BUSINESS_LINKS`.
+- El administrador no es un `user_role`: sale de la tabla `admins` (`is_admin()`), que solo se llena desde el SQL Editor (`docs/SUPABASE.md`). En la app la sesión queda con `role: "admin"` (`SessionRole`); `homeFor()` decide la pantalla de inicio de cada rol.
+- Todo lo de administración pasa por RPC `security definer` que comprueban `is_admin()` (`admin_reports`, `admin_action_log`, `admin_update_report`, `admin_set_vacancy_status`, `admin_pause_offer`, `admin_revoke_verification`), expuestas con `useAdmin()` y las acciones `admin*` del store. Cada acción queda en `admin_actions` y notifica al afectado.
+- El reportante solo puede leer columnas públicas de su reporte; la nota interna (`admin_note`) nunca le llega.
+
 ## Mapa
 
 - `@/components/BusinessMap` tiene dos implementaciones que Metro elige por plataforma: `BusinessMap.native.tsx` (react-native-maps: Google Maps en Android, Apple Maps en iOS) y `BusinessMap.web.tsx` (Google Maps JS con `@vis.gl/react-google-maps`). `BusinessMap.tsx` solo existe para los tipos; las props compartidas están en `BusinessMap.types.ts`.

@@ -24,6 +24,7 @@ Si tu proyecto ya tenía `schema.sql`, ejecuta cada archivo de `supabase/migraci
 | `001_etapas_2_3.sql` | Lecturas que faltaban (vacantes a las que te postulaste, servicios a los que enviaste solicitud) y funciones del servidor que calculan compatibilidad y contacto sin exponer la disponibilidad |
 | `002_perfil_estudiante_privado.sql` | Quita la lectura directa del perfil completo del estudiante por el negocio; solo recibe el perfil público |
 | `003_etapa_4.sql` | Evita el aviso duplicado al proponer una entrevista (las tablas de la Etapa 4 ya venían en `schema.sql`) |
+| `004_panel_admin.sql` | Panel de administración: tabla `admins`, `is_admin()`, estado de los reportes, bitácora `admin_actions` y funciones de moderación |
 
 En una instalación nueva no hace falta: `schema.sql` ya incluye todas las migraciones.
 
@@ -83,6 +84,23 @@ En **Authentication → URL Configuration → Redirect URLs** agrega:
 3. Completa el perfil en la app y verifica que los cambios se guardan en la tabla.
 4. Cierra sesión, vuelve a entrar y recarga la página: la sesión se restaura sola.
 5. Repite con una cuenta de negocio.
+
+## Administradores
+
+No existe un rol "admin" en el registro: nadie puede volverse administrador desde la app ni desde la API. Se hace solo desde el **SQL Editor** (requiere la migración 004).
+
+1. Registra la cuenta en la app con el correo que será de administración (por ejemplo, como negocio "Administración NEXO").
+2. En el SQL Editor, cambiando el correo:
+   ```sql
+   insert into admins (user_id) select id from auth.users where email = admin@tu-dominio.com;
+   delete from profiles where id = (select id from auth.users where email = admin@tu-dominio.com);
+   ```
+   La primera línea la hace administradora; la segunda borra su perfil de negocio o estudiante, para que no aparezca en el mapa, en Talento ni en vacantes.
+3. Inicia sesión en la app web (pantalla de 768 px o más): entra directo a `/admin/reportes`.
+
+- **Quitar el acceso:** `delete from admins where user_id = (select id from auth.users where email = …);`. La cuenta queda sin perfil y ya no puede entrar; bórrala en **Authentication → Users** si no se usará.
+- Una cuenta de administración no puede ser también estudiante o negocio: usa otro correo para eso.
+- Suspender cuentas no está en el panel: se hace en **Authentication → Users → Ban user**.
 
 ## Cargar datos a mano
 

@@ -4,6 +4,7 @@ import { Badge, type BadgeTone } from "@/components/ui";
 import {
   ACADEMIC_STATUS_LABELS,
   APPLICATION_STATUS_LABELS,
+  REPORT_STATUS_LABELS,
   SERVICE_OFFER_STATUS_LABELS,
   SERVICE_REQUEST_STATUS_LABELS,
   VACANCY_STATUS_LABELS,
@@ -12,6 +13,7 @@ import { COMPATIBILITY_LABELS, type CompatibilityLevel } from "@/lib/compatibili
 import type {
   AcademicStatus,
   ApplicationStatus,
+  ReportStatus,
   ServiceOfferStatus,
   ServiceRequestStatus,
   VacancyStatus,
@@ -88,4 +90,16 @@ const vacancyTone: Record<VacancyStatus, BadgeTone> = {
 
 export function VacancyStatusBadge({ status }: { status: VacancyStatus }) {
   return <Badge label={VACANCY_STATUS_LABELS[status]} tone={vacancyTone[status]} />;
+}
+
+const reportTone: Record<ReportStatus, BadgeTone> = {
+  nuevo: "coral",
+  en_revision: "warning",
+  resuelto: "success",
+  descartado: "neutral",
+};
+
+/** Estado de un reporte (solo en el panel de administración). */
+export function ReportStatusBadge({ status }: { status: ReportStatus }) {
+  return <Badge label={REPORT_STATUS_LABELS[status]} tone={reportTone[status]} />;
 }
