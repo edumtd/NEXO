@@ -81,6 +81,28 @@ export function uid(prefix = "id"): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+const ACCENTS: Record<string, string> = { á: "a", à: "a", ä: "a", â: "a", é: "e", è: "e", ë: "e", ê: "e", í: "i", ì: "i", ï: "i", î: "i", ó: "o", ò: "o", ö: "o", ô: "o", ú: "u", ù: "u", ü: "u", û: "u", ñ: "n" };
+
+/** Texto para búsquedas: sin acentos ni mayúsculas ("Cafetería" → "cafeteria"). */
+export function normalizeText(text: string): string {
+  return text.toLowerCase().replace(/[áàäâéèëêíìïîóòöôúùüûñ]/g, (c) => ACCENTS[c] ?? c).trim();
+}
+
+/** true si todas las palabras de la búsqueda aparecen en alguno de los textos. */
+export function matchesQuery(query: string, ...fields: (string | undefined)[]): boolean {
+  const words = normalizeText(query).split(/\s+/).filter(Boolean);
+  if (words.length === 0) return true;
+  const haystack = normalizeText(fields.filter(Boolean).join(" "));
+  return words.every((w) => haystack.includes(w));
+}
+
+/** Fecha AAAA-MM-DD sumando días a hoy. */
+export function addDaysISO(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 export function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }

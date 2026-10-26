@@ -141,6 +141,32 @@ export const SHIFT_SLOTS = [
 /** Sueldo mínimo por hora (equivalente) para el filtro. */
 export const MIN_HOURLY_OPTIONS = [0, 60, 80, 100] as const;
 
+/** Orden de la lista de vacantes (estudiante). "cercania" pide la ubicación en ese momento y no se guarda. */
+export const VACANCY_SORT_LABELS = {
+  recientes: "Más recientes",
+  sueldo: "Mejor pagadas",
+  compatibilidad: "Más compatibles",
+  cercania: "Más cercanas",
+} as const;
+export type VacancySort = keyof typeof VACANCY_SORT_LABELS;
+
+/** Filtro por fecha de inicio: incluye las que ya iniciaron (se pueden cubrir de inmediato). */
+export const START_WITHIN_LABELS = {
+  cualquiera: "Cualquiera",
+  semana: "Próximos 7 días",
+  mes: "Próximos 30 días",
+} as const;
+export type StartWithin = keyof typeof START_WITHIN_LABELS;
+export const START_WITHIN_DAYS: Record<Exclude<StartWithin, "cualquiera">, number> = { semana: 7, mes: 30 };
+
+/** Orden de Talento (negocio). Nunca por compatibilidad: permitiría adivinar la disponibilidad. */
+export const TALENT_SORT_LABELS = {
+  recientes: "Más recientes",
+  tarifa_asc: "Tarifa menor",
+  tarifa_desc: "Tarifa mayor",
+} as const;
+export type TalentSort = keyof typeof TALENT_SORT_LABELS;
+
 /** Términos que suelen indicar criterios discriminatorios en requisitos. */
 export const DISCRIMINATORY_TERMS = [
   "rango de edad",

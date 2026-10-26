@@ -59,7 +59,8 @@ Validar el SQL en local antes de ejecutarlo en Supabase: `powershell -ExecutionP
 
 - `@/components/BusinessMap` tiene dos implementaciones que Metro elige por plataforma: `BusinessMap.native.tsx` (react-native-maps: Google Maps en Android, Apple Maps en iOS) y `BusinessMap.web.tsx` (Google Maps JS con `@vis.gl/react-google-maps`). `BusinessMap.tsx` solo existe para los tipos; las props compartidas están en `BusinessMap.types.ts`.
 - Claves en `.env` (ver `.env.example`), nunca en el código: `EXPO_PUBLIC_GOOGLE_MAPS_WEB_KEY` (web; sin ella se muestra "Mapa no disponible") y `GOOGLE_MAPS_ANDROID_KEY` (builds propios de Android, vía `app.config.ts`). En Expo Go no hacen falta.
-- La ubicación del estudiante solo vive en el estado local de `VacancyMap`; nunca va al store, al almacenamiento ni a Supabase. Distancias en línea recta (`src/lib/geo.ts`); "Cómo llegar" abre la app de mapas externa. NEXO no calcula rutas.
+- La ubicación del estudiante se pide con `useCurrentLocation` ("Cerca de mí" en `VacancyMap` y el orden "Más cercanas" en Buscar vacantes) y solo vive en el estado local de ese componente; nunca va al store, al almacenamiento ni a Supabase.
+- Filtros, búsqueda y orden de Buscar vacantes y Talento se recuerdan por usuario con `usePersistentState` (AsyncStorage). Ahí solo van preferencias: nunca la ubicación ni datos personales. El orden "Más cercanas" no se guarda. Distancias en línea recta (`src/lib/geo.ts`); "Cómo llegar" abre la app de mapas externa. NEXO no calcula rutas.
 
 ## Convenciones
 

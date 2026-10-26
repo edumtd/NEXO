@@ -1,4 +1,3 @@
-import * as Location from "expo-location";
 import { router } from "expo-router";
 import { BadgeCheck, ChevronRight, LocateFixed, MapPin, Navigation } from "lucide-react-native";
 import { useMemo, useState } from "react";
@@ -8,6 +7,7 @@ import { BusinessIcon } from "@/components/BusinessIcon";
 import { BusinessMap, type MapMarker } from "@/components/BusinessMap";
 import { CompatibilityBadge } from "@/components/StatusBadges";
 import { Button, Card } from "@/components/ui";
+import { useCurrentLocation } from "@/hooks/useCurrentLocation";
 import type { StudentVacancyItem } from "@/hooks/useStudentVacancies";
 import { compareCompatibility, type CompatibilityLevel } from "@/lib/compatibility";
 import { CATEGORY_LABELS } from "@/lib/constants";
@@ -30,14 +30,12 @@ interface BusinessGroup {
 
 /**
  * Vista de mapa de Buscar vacantes. Usa exactamente los resultados ya filtrados de la lista.
- * La ubicación del estudiante vive solo en este componente: no se guarda ni se envía a nadie.
+ * La ubicación del estudiante vive solo en este componente (useCurrentLocation): no se guarda ni se envía a nadie.
  */
 export function VacancyMap({ items }: { items: StudentVacancyItem[] }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [userLocation, setUserLocation] = useState<GeoPoint | null>(null);
+  const { location: userLocation, locating, error: locationError, locate: requestLocation } = useCurrentLocation();
   const [center, setCenter] = useState<GeoPoint>(DEFAULT_CENTER);
-  const [locating, setLocating] = useState(false);
-  const [locationError, setLocationError] = useState<string | null>(null);
 
   const { groups, withoutPin } = useMemo(() => {
     const map = new Map<string, BusinessGroup>();
@@ -78,25 +76,10 @@ export function VacancyMap({ items }: { items: StudentVacancyItem[] }) {
     if (g) setCenter({ latitude: g.business.latitude, longitude: g.business.longitude });
   };
 
+  // El permiso se pide solo al tocar "Cerca de mí".
   const locate = async () => {
-    setLocating(true);
-    setLocationError(null);
-    try {
-      // El permiso se pide solo al tocar "Cerca de mí".
-      const { granted } = await Location.requestForegroundPermissionsAsync();
-      if (!granted) {
-        setLocationError("Sin permiso de ubicación. Puedes seguir usando el mapa sin ella.");
-        return;
-      }
-      const pos = await Location.getCurrentPositionAsync({});
-      const here = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
-      setUserLocation(here);
-      setCenter(here);
-    } catch {
-      setLocationError("No pudimos obtener tu ubicación.");
-    } finally {
-      setLocating(false);
-    }
+    const here = await requestLocation();
+    if (here) setCenter(here);
   };
 
   return (
