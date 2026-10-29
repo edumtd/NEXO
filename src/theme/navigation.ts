@@ -111,12 +111,15 @@ export const HIDDEN_TAB_OPTIONS = {
   tabBarItemStyle: { display: "none" },
 } as const;
 
-/** Panel de administración: solo web ancha. No forma parte de la navegación de estudiantes ni negocios. */
+/** Panel de administración: barra lateral en web ancha y barra inferior en pantallas angostas. Nunca se mezcla con estudiantes ni negocios. */
 export const ADMIN_LINKS: NavLink[] = [
-  { name: "reportes", href: "/admin/reportes", label: "Reportes", icon: Flag, inTabBar: false, match: ["/admin/reporte/"] },
-  { name: "verificaciones", href: "/admin/verificaciones", label: "Verificaciones", icon: BadgeCheck, inTabBar: false, match: ["/admin/verificacion/"] },
-  { name: "bitacora", href: "/admin/bitacora", label: "Bitácora", icon: ScrollText, inTabBar: false },
+  { name: "reportes", href: "/admin/reportes", label: "Reportes", icon: Flag, inTabBar: true, match: ["/admin/reporte/"] },
+  { name: "verificaciones", href: "/admin/verificaciones", label: "Verificaciones", icon: BadgeCheck, inTabBar: true, match: ["/admin/verificacion/"] },
+  { name: "bitacora", href: "/admin/bitacora", label: "Bitácora", icon: ScrollText, inTabBar: true },
 ];
+
+/** Rutas del panel que no aparecen en ninguna barra (index solo redirige a la bandeja). */
+export const ADMIN_HIDDEN_ROUTES = ["index", "reporte/[id]", "verificacion/[id]"];
 
 /** Pantalla de inicio de cada tipo de sesión. */
 export function homeFor(role: SessionRole): Href {

@@ -3,6 +3,7 @@ import { ChevronRight, Flag, Inbox } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
+import { AdminSignOut } from "@/components/AdminSignOut";
 import { Screen } from "@/components/Screen";
 import { ReportStatusBadge } from "@/components/StatusBadges";
 import { Chip, EmptyState } from "@/components/ui";
@@ -25,7 +26,7 @@ export default function AdminReportes() {
   const list = status ? reports.filter((r) => r.status === status) : reports;
 
   return (
-    <Screen title="Reportes" subtitle="Revisa lo que reportan estudiantes y negocios">
+    <Screen right={<AdminSignOut />} title="Reportes" subtitle="Revisa lo que reportan estudiantes y negocios">
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2">
         <Chip label={`Todos (${reports.length})`} selected={status === null} onPress={() => setStatus(null)} />
         {(Object.keys(REPORT_STATUS_LABELS) as ReportStatus[]).map((s) => (

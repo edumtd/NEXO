@@ -1,6 +1,7 @@
 import { ScrollText } from "lucide-react-native";
 import { Text, View } from "react-native";
 
+import { AdminSignOut } from "@/components/AdminSignOut";
 import { Screen } from "@/components/Screen";
 import { EmptyState } from "@/components/ui";
 import { ADMIN_ACTION_LABELS } from "@/lib/constants";
@@ -12,7 +13,7 @@ export default function AdminBitacora() {
   const { actions } = useAdmin();
 
   return (
-    <Screen title="Bitácora" subtitle="Acciones de administración, de la más reciente a la más antigua">
+    <Screen right={<AdminSignOut />} title="Bitácora" subtitle="Acciones de administración, de la más reciente a la más antigua">
       {actions.length === 0 ? (
         <EmptyState icon={ScrollText} title="Sin acciones todavía" description="Cada revisión y acción de moderación quedará registrada aquí." />
       ) : (

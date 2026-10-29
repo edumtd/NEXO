@@ -3,6 +3,7 @@ import { ChevronRight, FileText, Inbox } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
+import { AdminSignOut } from "@/components/AdminSignOut";
 import { Screen } from "@/components/Screen";
 import { VerificationStatusBadge } from "@/components/StatusBadges";
 import { Chip, EmptyState } from "@/components/ui";
@@ -25,7 +26,7 @@ export default function AdminVerificaciones() {
   const list = status ? verifications.filter((v) => v.status === status) : verifications;
 
   return (
-    <Screen title="Verificaciones" subtitle="Comprobantes de domicilio de los negocios">
+    <Screen right={<AdminSignOut />} title="Verificaciones" subtitle="Comprobantes de domicilio de los negocios">
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2">
         <Chip label={`Todas (${verifications.length})`} selected={status === null} onPress={() => setStatus(null)} />
         {(Object.keys(VERIFICATION_STATUS_LABELS) as VerificationStatus[]).map((s) => (

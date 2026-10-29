@@ -97,7 +97,7 @@ No existe un rol "admin" en el registro: nadie puede volverse administrador desd
    delete from profiles where id = (select id from auth.users where email = admin@tu-dominio.com);
    ```
    La primera línea la hace administradora; la segunda borra su perfil de negocio o estudiante, para que no aparezca en el mapa, en Talento ni en vacantes.
-3. Inicia sesión en la app web (pantalla de 768 px o más): entra directo a `/admin/reportes`.
+3. Inicia sesión en la app (web o celular): entra directo a `/admin/reportes`.
 
 - **Quitar el acceso:** `delete from admins where user_id = (select id from auth.users where email = …);`. La cuenta queda sin perfil y ya no puede entrar; bórrala en **Authentication → Users** si no se usará.
 - Una cuenta de administración no puede ser también estudiante o negocio: usa otro correo para eso.

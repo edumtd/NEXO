@@ -36,9 +36,10 @@ Expo SDK 58 (React Native 0.88) · TypeScript · Expo Router · NativeWind 4 (Ta
 - **Recuperar contraseña** por correo.
 - En web con pantalla ancha, barra lateral en lugar de la barra inferior.
 
-### Administración (solo web)
+### Administración
 - Bandeja de reportes con estado y nota interna, acciones de moderación (pausar o cerrar vacantes, pausar servicios, retirar verificación) y bitácora de acciones.
 - Revisión de comprobantes de domicilio para verificar negocios.
+- Funciona en computadora (barra lateral) y en celular (barra inferior).
 - Los administradores no se crean desde la app: se dan de alta solo desde el SQL Editor de Supabase (ver [docs/SUPABASE.md](docs/SUPABASE.md)).
 
 ## Ejecutar localmente
@@ -97,7 +98,7 @@ src/
     estudiante/              Inicio, vacantes, postulaciones, servicios, disponibilidad,
                              mi semana, notificaciones, perfil y detalles
     negocio/                 Panel, vacantes, talento, postulantes, notificaciones, perfil
-    admin/                   Reportes, detalle del reporte y bitácora (solo web)
+    admin/                   Reportes, verificaciones y bitácora (web y celular)
   components/
     ui/                      Button, Input, Card, Badge, Chip, Avatar, EmptyState, LoadingState, ProgressRing
     Screen.tsx               Cabecera azul marino + hoja redondeada
@@ -154,7 +155,7 @@ Superar el límite de horas semanales del estudiante se muestra como un aviso ap
 | Supabase | Cuentas, datos y notificaciones en la base (etapas 1–4) | ✅ |
 | Cuentas | Recuperar contraseña | ✅ |
 | Búsqueda | Orden, filtros nuevos y búsqueda sin acentos | ✅ |
-| Administración | Panel de reportes, moderación y bitácora | ✅ |
+| Administración | Panel de reportes, verificaciones, moderación y bitácora (web y celular) | ✅ |
 | Fase D | Verificación de negocios (comprobante) y estudiantes (correo institucional) | ✅ |
 
 ### Próximos pasos

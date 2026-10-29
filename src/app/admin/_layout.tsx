@@ -1,55 +1,52 @@
-import { Redirect, Stack, router } from "expo-router";
-import { Monitor } from "lucide-react-native";
-import { View } from "react-native";
+import { Redirect, Tabs } from "expo-router";
 
-import { Screen } from "@/components/Screen";
 import { SideNav } from "@/components/SideNav";
-import { Button, EmptyState, LoadingState } from "@/components/ui";
+import { tabIcon } from "@/components/TabBarIcon";
+import { LoadingState } from "@/components/ui";
 import { useAdmin, useApp } from "@/store/AppStore";
 import { colors } from "@/theme/colors";
-import { ADMIN_LINKS, useIsWideWeb } from "@/theme/navigation";
+import { ADMIN_HIDDEN_ROUTES, ADMIN_LINKS, HIDDEN_TAB_OPTIONS, useIsWideWeb, useTabBarOptions } from "@/theme/navigation";
 
 /**
- * Panel de administración: solo web desde 768px. Quien no es administrador vuelve a "/".
- * La app solo decide qué mostrar; los permisos reales los aplica Supabase (is_admin()).
+ * Panel de administración: barra lateral en web ancha y barra inferior en celular o pantallas angostas.
+ * Quien no es administrador vuelve a "/". La app solo decide qué mostrar; los permisos reales los aplica
+ * Supabase (is_admin()).
  */
 export default function AdminLayout() {
-  const { session, authReady, logout } = useApp();
+  const { session, authReady } = useApp();
   const { reports, verifications } = useAdmin();
+  const tabBarOptions = useTabBarOptions();
   const wide = useIsWideWeb();
 
   if (!authReady) return <LoadingState message="Cargando tu sesión…" />;
   if (!session || session.role !== "admin") return <Redirect href="/" />;
 
-  if (!wide) {
-    return (
-      <Screen title="Panel de administración" subtitle="NEXO">
-        <EmptyState
-          icon={Monitor}
-          title="Abre el panel desde una computadora"
-          description="El panel de administración funciona en el navegador con una pantalla de al menos 768 px de ancho."
-        />
-        <View className="mt-4">
-          <Button
-            title="Cerrar sesión"
-            variant="outline"
-            onPress={() => {
-              logout();
-              router.replace("/");
-            }}
-          />
-        </View>
-      </Screen>
-    );
-  }
+  const counts: Record<string, number> = {
+    reportes: reports.filter((r) => r.status === "nuevo").length,
+    verificaciones: verifications.filter((v) => v.status === "en_revision").length,
+  };
 
-  const pending = reports.filter((r) => r.status === "nuevo").length;
   return (
-    <View className="flex-1 flex-row bg-surface">
-      <SideNav links={ADMIN_LINKS} title="Administración" subtitle="Panel de NEXO" counts={{ reportes: pending, verificaciones: verifications.filter((v) => v.status === "en_revision").length }} />
-      <View className="flex-1">
-        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.surface } }} />
-      </View>
-    </View>
+    <Tabs
+      screenOptions={tabBarOptions}
+      tabBar={wide ? () => <SideNav links={ADMIN_LINKS} title="Administración" subtitle="Panel de NEXO" counts={counts} /> : undefined}
+    >
+      {ADMIN_LINKS.map((link) => (
+        <Tabs.Screen
+          key={link.name}
+          name={link.name}
+          options={{
+            title: link.tabLabel ?? link.label,
+            tabBarIcon: tabIcon(link.icon),
+            // En la barra inferior el contador de pendientes va como globo sobre el ícono.
+            tabBarBadge: counts[link.name] ? counts[link.name] : undefined,
+            tabBarBadgeStyle: { backgroundColor: colors.coral, color: colors.white, fontSize: 10 },
+          }}
+        />
+      ))}
+      {ADMIN_HIDDEN_ROUTES.map((name) => (
+        <Tabs.Screen key={name} name={name} options={HIDDEN_TAB_OPTIONS} />
+      ))}
+    </Tabs>
   );
 }

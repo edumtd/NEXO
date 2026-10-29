@@ -57,7 +57,7 @@ Validar el SQL en local antes de ejecutarlo en Supabase: `powershell -ExecutionP
 
 ## Panel de administración
 
-- Rutas en `src/app/admin/` (solo web ≥768px; en pantallas angostas muestra "Abre el panel desde una computadora"). Navegación con `ADMIN_LINKS` y `<SideNav />`; nunca en `STUDENT_LINKS` ni `BUSINESS_LINKS`.
+- Rutas en `src/app/admin/`, con el mismo patrón de pestañas que los otros roles: `<SideNav />` en web ≥768px y barra inferior en celular o pantallas angostas (con `AdminSignOut` en la cabecera para salir). Navegación con `ADMIN_LINKS` y `ADMIN_HIDDEN_ROUTES`; nunca en `STUDENT_LINKS` ni `BUSINESS_LINKS`.
 - El administrador no es un `user_role`: sale de la tabla `admins` (`is_admin()`), que solo se llena desde el SQL Editor (`docs/SUPABASE.md`). En la app la sesión queda con `role: "admin"` (`SessionRole`); `homeFor()` decide la pantalla de inicio de cada rol.
 - Todo lo de administración pasa por RPC `security definer` que comprueban `is_admin()` (`admin_reports`, `admin_action_log`, `admin_update_report`, `admin_set_vacancy_status`, `admin_pause_offer`, `admin_revoke_verification`), expuestas con `useAdmin()` y las acciones `admin*` del store. Cada acción queda en `admin_actions` y notifica al afectado.
 - El reportante solo puede leer columnas públicas de su reporte; la nota interna (`admin_note`) nunca le llega.
