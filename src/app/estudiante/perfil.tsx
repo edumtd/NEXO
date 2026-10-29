@@ -6,6 +6,7 @@ import { Controller, useForm } from "react-hook-form";
 import { Switch, Text, View } from "react-native";
 
 import { Screen, SectionTitle } from "@/components/Screen";
+import { StudentVerification } from "@/components/StudentVerification";
 import { TagInput } from "@/components/TagInput";
 import { Avatar, Button, Card, Chip, Input } from "@/components/ui";
 import { totalWeeklyMinutes } from "@/lib/compatibility";
@@ -81,6 +82,10 @@ export default function PerfilEstudiante() {
           <ChevronRight size={20} color={colors.soft} />
         </View>
       </Card>
+
+      <View className="mt-4">
+        <StudentVerification />
+      </View>
 
       <SectionTitle title="Datos del perfil" />
       <View className="gap-4">

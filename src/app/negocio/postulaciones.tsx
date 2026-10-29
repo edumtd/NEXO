@@ -19,6 +19,7 @@ import { formatRate } from "@/components/ServiceCard";
 import { ServiceProgress } from "@/components/ServiceProgress";
 import {
   AcademicStatusBadge,
+  StudentVerifiedBadge,
   ApplicationStatusBadge,
   CompatibilityBadge,
   ServiceRequestStatusBadge,
@@ -145,7 +146,10 @@ function ServiceRequestCard({ item }: { item: BusinessRequestItem }) {
           <Text className="mb-1 text-sm text-ink-muted" numberOfLines={1}>
             {offer.title}
           </Text>
-          <AcademicStatusBadge status={student.academicStatus} />
+          <View className="flex-row flex-wrap gap-1.5">
+            <AcademicStatusBadge status={student.academicStatus} />
+            <StudentVerifiedBadge verified={student.studentVerified} />
+          </View>
         </View>
         <ServiceRequestStatusBadge status={r.status} />
       </View>
@@ -212,6 +216,11 @@ function ApplicantCard({ item }: { item: ApplicantItem }) {
           <Text className="text-sm text-ink-muted" numberOfLines={1}>
             {s.career}
           </Text>
+          {s.studentVerified ? (
+            <View className="mt-1 self-start">
+              <StudentVerifiedBadge verified />
+            </View>
+          ) : null}
         </View>
         <ApplicationStatusBadge status={a.status} />
       </View>

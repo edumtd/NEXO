@@ -9,6 +9,8 @@ import type {
   ReportReason,
   ReportStatus,
   ReportTarget,
+  VerificationMime,
+  VerificationStatus,
   RatePeriod,
   SalaryPeriod,
   ServiceCategory,
@@ -227,6 +229,18 @@ export const ADMIN_ACTION_LABELS: Record<AdminActionKind, string> = {
   servicio_pausado: "Servicio pausado",
   verificacion_retirada: "Verificación retirada",
 };
+
+export const VERIFICATION_STATUS_LABELS: Record<VerificationStatus, string> = {
+  en_revision: "En revisión",
+  verificado: "Verificado",
+  rechazado: "Rechazado",
+};
+
+/** Comprobante de domicilio: formatos y tamaño aceptados (los mismos que el bucket de Supabase). */
+export const VERIFICATION_MIME_TYPES: VerificationMime[] = ["application/pdf", "image/jpeg", "image/png"];
+export const VERIFICATION_MAX_BYTES = 5 * 1024 * 1024;
+/** Días de espera para volver a solicitar después de un rechazo. */
+export const VERIFICATION_RETRY_DAYS = 7;
 
 /** Lugar especial para entrevistas a distancia. */
 export const ONLINE_PLACE = "En línea";

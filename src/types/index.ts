@@ -53,6 +53,8 @@ export interface StudentProfile {
   maxWeeklyHours?: number;
   /** Avisos de vacantes nuevas 100% compatibles. Desactivado por defecto. */
   alertsEnabled: boolean;
+  /** Verificó un correo institucional. Es lo único que el negocio ve de la verificación. */
+  studentVerified: boolean;
 }
 
 /** Vacante guardada por un estudiante. Privada: el negocio no la ve. */
@@ -65,7 +67,7 @@ export interface SavedVacancy {
 /** Datos del estudiante que un negocio puede ver en Talento (sin correo ni disponibilidad). */
 export type PublicStudent = Pick<
   StudentProfile,
-  "id" | "fullName" | "career" | "university" | "zone" | "skills" | "academicStatus"
+  "id" | "fullName" | "career" | "university" | "zone" | "skills" | "academicStatus" | "studentVerified"
 >;
 
 export type ServiceCategory =
@@ -280,4 +282,38 @@ export interface AdminAction {
   targetId: string;
   note?: string;
   createdAt: string;
+}
+
+// ───────── Verificación ─────────
+
+export type VerificationStatus = "en_revision" | "verificado" | "rechazado";
+export type VerificationMime = "application/pdf" | "image/jpeg" | "image/png";
+
+/** Solicitud de verificación de un negocio (lo que el negocio ve de la suya). */
+export interface VerificationRequest {
+  id: string;
+  businessId: string;
+  status: VerificationStatus;
+  mimeType: VerificationMime;
+  sizeBytes: number;
+  rejectReason?: string;
+  reviewedAt?: string;
+  createdAt: string;
+}
+
+/** Solicitud vista por administración, con los datos del negocio para comparar. */
+export interface AdminVerificationRequest extends VerificationRequest {
+  /** Ruta en el bucket privado; vacía cuando ya se resolvió y el archivo se borró. */
+  filePath?: string;
+  businessName: string;
+  businessAddress: string;
+  businessZone: string;
+  businessPhone: string;
+  businessVerified: boolean;
+}
+
+/** Código pendiente de verificación del estudiante (sin datos del correo). */
+export interface StudentCodeStatus {
+  expiresAt: string;
+  attemptsLeft: number;
 }

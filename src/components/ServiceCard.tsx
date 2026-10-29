@@ -1,7 +1,7 @@
 import { CircleDollarSign, Laptop, MapPin, Tag } from "lucide-react-native";
 import { Text, View } from "react-native";
 
-import { AcademicStatusBadge } from "@/components/StatusBadges";
+import { AcademicStatusBadge, StudentVerifiedBadge } from "@/components/StatusBadges";
 import { Avatar, Card } from "@/components/ui";
 import { RATE_PERIOD_LABELS, SERVICE_CATEGORY_LABELS, SERVICE_MODALITY_LABELS } from "@/lib/constants";
 import { formatMoney } from "@/lib/format";
@@ -36,6 +36,11 @@ export function ServiceCard({ offer, student, onPress }: ServiceCardProps) {
           <Text className="text-sm text-ink-muted" numberOfLines={1}>
             {student.career}
           </Text>
+          {student.studentVerified ? (
+            <View className="mt-1 self-start">
+              <StudentVerifiedBadge verified />
+            </View>
+          ) : null}
         </View>
         <AcademicStatusBadge status={student.academicStatus} />
       </View>

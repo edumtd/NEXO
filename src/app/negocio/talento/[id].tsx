@@ -17,7 +17,7 @@ import { Linking, Pressable, Text, View } from "react-native";
 import { DayPicker, TimeStepper } from "@/components/Pickers";
 import { Screen, SectionTitle } from "@/components/Screen";
 import { formatModality, formatRate } from "@/components/ServiceCard";
-import { AcademicStatusBadge, ServiceRequestStatusBadge } from "@/components/StatusBadges";
+import { AcademicStatusBadge, ServiceRequestStatusBadge, StudentVerifiedBadge } from "@/components/StatusBadges";
 import { Avatar, Button, Card, EmptyState, Input } from "@/components/ui";
 import { useMarketplaceOffers } from "@/hooks/useServiceOffers";
 import { useBusinessServiceRequests } from "@/hooks/useServiceRequests";
@@ -61,7 +61,10 @@ export default function TalentoDetalle() {
             <Text className="mb-1 text-sm text-ink-muted" numberOfLines={1}>
               {student.career}
             </Text>
-            <AcademicStatusBadge status={student.academicStatus} />
+            <View className="flex-row flex-wrap gap-1.5">
+              <AcademicStatusBadge status={student.academicStatus} />
+              <StudentVerifiedBadge verified={student.studentVerified} />
+            </View>
           </View>
         </View>
         <View className="mt-3 gap-1.5">

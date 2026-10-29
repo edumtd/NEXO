@@ -62,6 +62,12 @@ Validar el SQL en local antes de ejecutarlo en Supabase: `powershell -ExecutionP
 - Todo lo de administración pasa por RPC `security definer` que comprueban `is_admin()` (`admin_reports`, `admin_action_log`, `admin_update_report`, `admin_set_vacancy_status`, `admin_pause_offer`, `admin_revoke_verification`), expuestas con `useAdmin()` y las acciones `admin*` del store. Cada acción queda en `admin_actions` y notifica al afectado.
 - El reportante solo puede leer columnas públicas de su reporte; la nota interna (`admin_note`) nunca le llega.
 
+## Verificación
+
+- **Negocios:** `BusinessVerification` (perfil del negocio) sube el comprobante al bucket privado `verificaciones/{business_id}/` y crea una fila en `verification_requests`. Administración lo ve con un enlace firmado de 60 s (`/admin/verificaciones`) y lo resuelve con `admin_resolve_verification`, que actualiza `business_profiles.verified`, notifica y devuelve la ruta para borrar el archivo. El negocio nunca lee la ruta ni el archivo.
+- **Estudiantes:** `StudentVerification` (perfil) llama `request_student_email_code` (envía el código con `pg_net` + Brevo, claves en el Vault) y `verify_student_email_code` (devuelve `true`/`false`). Solo se guarda `student_profiles.student_verified_at` y una huella del correo; el negocio recibe `studentVerified` vía `visible_public_students()` y se muestra con `StudentVerifiedBadge`.
+- Dominios institucionales: la regla `.edu.mx` está en `is_institutional_email()`; cualquier otro dominio va en la tabla `student_email_domains` (desde el SQL Editor), nunca en el código, para no nombrar instituciones reales.
+
 ## Mapa
 
 - `@/components/BusinessMap` tiene dos implementaciones que Metro elige por plataforma: `BusinessMap.native.tsx` (react-native-maps: Google Maps en Android, Apple Maps en iOS) y `BusinessMap.web.tsx` (Google Maps JS con `@vis.gl/react-google-maps`). `BusinessMap.tsx` solo existe para los tipos; las props compartidas están en `BusinessMap.types.ts`.

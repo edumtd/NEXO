@@ -332,3 +332,14 @@ export const adminReasonSchema = z.object({
   reason: z.string().trim().min(10, "Explica el motivo (mínimo 10 caracteres)").max(300, "Máximo 300 caracteres"),
 });
 export type AdminReasonValues = z.infer<typeof adminReasonSchema>;
+
+// ───────── Verificación de estudiantes ─────────
+
+/** El servidor decide si el dominio es institucional; aquí solo se valida el formato. */
+export const studentEmailSchema = z.object({ email });
+export type StudentEmailValues = z.infer<typeof studentEmailSchema>;
+
+export const studentCodeSchema = z.object({
+  code: z.string().trim().regex(/^\d{6}$/, "Escribe los 6 dígitos del código"),
+});
+export type StudentCodeValues = z.infer<typeof studentCodeSchema>;

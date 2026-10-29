@@ -19,7 +19,9 @@ import { Platform, AppState as RNAppState } from "react-native";
 
 import type { CompatibilityLevel } from "@/lib/compatibility";
 import {
+  VERIFICATION_REQUEST_COLUMNS,
   adminActionFromRow,
+  adminVerificationFromRow,
   adminReportFromRow,
   applicationFromRow,
   authErrorMessage,
@@ -39,7 +41,9 @@ import {
   studentPatchToRow,
   vacancyFromRow,
   vacancyInputToRow,
+  verificationRequestFromRow,
   type AdminActionRow,
+  type AdminVerificationRow,
   type AdminReportRow,
   type ApplicationRow,
   type AvailabilityRow,
@@ -54,6 +58,7 @@ import {
   type ServiceUpdateRow,
   type StudentRow,
   type VacancyRow,
+  type VerificationRequestRow,
 } from "@/lib/db";
 import { formatDate, todayISO } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
@@ -61,6 +66,7 @@ import type {
   AcademicStatus,
   AdminAction,
   AdminReport,
+  AdminVerificationRequest,
   AppNotification,
   Application,
   ApplicationStatus,
@@ -78,14 +84,29 @@ import type {
   ReportStatus,
   Session,
   SessionRole,
+  StudentCodeStatus,
   StudentProfile,
   Vacancy,
   VacancyStatus,
+  VerificationMime,
+  VerificationRequest,
 } from "@/types";
 
 export type VacancyInput = Omit<Vacancy, "id" | "businessId" | "status" | "createdAt">;
 export type ServiceOfferInput = Omit<ServiceOffer, "id" | "studentId" | "status" | "createdAt">;
 export type ServiceRequestInput = Pick<ServiceRequest, "offerId" | "message" | "days" | "start" | "end">;
+
+/** Archivo elegido con expo-document-picker (en web trae también el `File`). */
+export interface VerificationFile {
+  uri: string;
+  name: string;
+  mimeType: VerificationMime;
+  size: number;
+  file?: Blob;
+}
+
+/** Errores de tablas o funciones que aún no existen (migración pendiente): se tratan como vacíos. */
+const isMissingSchema = (e: DbError) => !!e && ["PGRST202", "PGRST205", "42P01", "42883"].includes(e.code ?? "");
 
 /** Resultado de una acción: si hay `error`, ya se mostró en el aviso global. */
 export interface ActionResult {
@@ -129,7 +150,12 @@ interface AppState {
   savedVacancies: SavedVacancy[];
   /** Propuestas de entrevista de las postulaciones que el usuario puede ver. */
   interviews: InterviewProposal[];
+  /** Solo para negocios: sus solicitudes de verificación, la más reciente primero. */
+  verificationRequests: VerificationRequest[];
+  /** Solo para estudiantes: código de verificación pendiente, si pidió uno. */
+  studentCodeStatus: StudentCodeStatus | null;
   /** Solo para administración (vacío para estudiantes y negocios). */
+  adminVerifications: AdminVerificationRequest[];
   adminReports: AdminReport[];
   adminActions: AdminAction[];
   /** Último error de una acción, para el aviso global. */
@@ -151,6 +177,9 @@ const EMPTY_STATE: AppState = {
   requestInsights: {},
   savedVacancies: [],
   interviews: [],
+  verificationRequests: [],
+  studentCodeStatus: null,
+  adminVerifications: [],
   adminReports: [],
   adminActions: [],
   lastError: null,
@@ -206,6 +235,16 @@ interface AppActions {
   proposeInterview: (applicationId: string, slots: InterviewSlot[]) => Promise<ActionResult>;
   /** El estudiante elige un horario (índice) o pide otros (null). */
   respondInterview: (proposalId: string, index: number | null) => Promise<ActionResult>;
+  /** Negocio: sube el comprobante al bucket privado y crea la solicitud de verificación. */
+  requestBusinessVerification: (file: VerificationFile) => Promise<ActionResult>;
+  /** Estudiante: envía un código de 6 dígitos a su correo institucional. */
+  requestStudentEmailCode: (email: string) => Promise<ActionResult>;
+  /** Estudiante: comprueba el código; si es correcto, la cuenta queda verificada. */
+  verifyStudentEmailCode: (code: string) => Promise<ActionResult>;
+  /** Administración: aprueba o rechaza y borra el comprobante del bucket. */
+  adminResolveVerification: (requestId: string, approve: boolean, reason: string) => Promise<ActionResult>;
+  /** Administración: enlace temporal (60 s) para ver un comprobante. */
+  adminVerificationDocumentUrl: (filePath: string) => Promise<{ url?: string; error?: string }>;
   // Administración: todo pasa por funciones del servidor que comprueban is_admin().
   adminUpdateReport: (reportId: string, status: ReportStatus, note: string) => Promise<ActionResult>;
   adminSetVacancyStatus: (vacancyId: string, status: "pausada" | "cerrada", reason: string) => Promise<ActionResult>;
@@ -234,14 +273,19 @@ async function fetchSnapshot(client: SupabaseClient, user: User): Promise<Partia
   // PGRST202: la migración 004 aún no se ejecuta; nadie es administrador todavía.
   if (adminError && adminError.code !== "PGRST202") throw adminError;
   if (isAdmin === true) {
-    const [reports, actions] = await Promise.all([client.rpc("admin_reports"), client.rpc("admin_action_log")]);
-    const adminRpcError = reports.error ?? actions.error;
+    const [reports, actions, verifications] = await Promise.all([
+      client.rpc("admin_reports"),
+      client.rpc("admin_action_log"),
+      client.rpc("admin_verification_requests"),
+    ]);
+    const adminRpcError = reports.error ?? actions.error ?? (isMissingSchema(verifications.error) ? null : verifications.error);
     if (adminRpcError) throw adminRpcError;
     return {
       ...EMPTY_STATE,
       session: { role: "admin", userId: user.id },
       adminReports: ((reports.data as AdminReportRow[] | null) ?? []).map(adminReportFromRow),
       adminActions: ((actions.data as AdminActionRow[] | null) ?? []).map(adminActionFromRow),
+      adminVerifications: ((verifications.data as AdminVerificationRow[] | null) ?? []).map(adminVerificationFromRow),
     };
   }
 
@@ -283,14 +327,18 @@ async function fetchSnapshot(client: SupabaseClient, user: User): Promise<Partia
     interviews: (interviews.data ?? []).map(interviewFromRow),
     adminReports: [],
     adminActions: [],
+    adminVerifications: [],
   };
 
   if (prof.role === "estudiante") {
-    const [me, blocks, saved] = await Promise.all([
+    const [me, blocks, saved, codeStatus] = await Promise.all([
       client.from("student_profiles").select("*").eq("id", user.id).maybeSingle<StudentRow>(),
       client.from("availability_blocks").select("*").eq("student_id", user.id).returns<AvailabilityRow[]>(),
       client.from("saved_vacancies").select("*").eq("student_id", user.id).returns<SavedVacancyRow[]>(),
+      client.rpc("student_email_code_status"),
     ]);
+    if (codeStatus.error && !isMissingSchema(codeStatus.error)) throw codeStatus.error;
+    const pendingCode = ((codeStatus.data as { expires_at: string; attempts_left: number }[] | null) ?? [])[0];
     if (me.error) throw me.error;
     if (blocks.error) throw blocks.error;
     if (saved.error) throw saved.error;
@@ -300,6 +348,8 @@ async function fetchSnapshot(client: SupabaseClient, user: User): Promise<Partia
       students: [studentFromRow(me.data, user.email ?? "")],
       availability: { [user.id]: (blocks.data ?? []).map(availabilityFromRow) },
       savedVacancies: (saved.data ?? []).map(savedVacancyFromRow),
+      studentCodeStatus: pendingCode ? { expiresAt: pendingCode.expires_at, attemptsLeft: pendingCode.attempts_left } : null,
+      verificationRequests: [],
       applicationInsights: {},
       requestInsights: {},
     };
@@ -307,11 +357,19 @@ async function fetchSnapshot(client: SupabaseClient, user: User): Promise<Partia
 
   // Negocio: perfiles públicos y datos derivados calculados en el servidor (sin disponibilidad ajena).
   if (!common.businesses?.some((b) => b.id === user.id)) return null;
-  const [publicStudents, appDetails, requestDetails] = await Promise.all([
+  const [publicStudents, appDetails, requestDetails, verifRequests] = await Promise.all([
     client.rpc("visible_public_students"),
     client.rpc("business_application_details"),
     client.rpc("business_service_request_details"),
+    client
+      .from("verification_requests")
+      .select(VERIFICATION_REQUEST_COLUMNS)
+      .eq("business_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(10)
+      .returns<VerificationRequestRow[]>(),
   ]);
+  if (verifRequests.error && !isMissingSchema(verifRequests.error)) throw verifRequests.error;
   type AppDetail = { application_id: string; level: CompatibilityLevel; full_days: number; total_days: number; contact_email: string | null };
   type RequestDetail = { request_id: string; level: CompatibilityLevel | null; contact_email: string | null };
   const rpcError = [publicStudents, appDetails, requestDetails].find((r) => r.error)?.error;
@@ -334,6 +392,8 @@ async function fetchSnapshot(client: SupabaseClient, user: User): Promise<Partia
     students: ((publicStudents.data as PublicStudentRow[] | null) ?? []).map((r) => publicStudentFromRow(r, emailByStudent[r.id] ?? "")),
     availability: {},
     savedVacancies: [],
+    studentCodeStatus: null,
+    verificationRequests: (verifRequests.data ?? []).map(verificationRequestFromRow),
     applicationInsights,
     requestInsights,
   };
@@ -843,6 +903,87 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [fail]
   );
 
+  // ───────── Verificación ─────────
+
+  const requestBusinessVerification = useCallback<AppActions["requestBusinessVerification"]>(
+    (file) =>
+      mutate("negocio", "No pudimos enviar tu comprobante. Inténtalo de nuevo.", async (c, uid) => {
+        const ext = file.mimeType === "application/pdf" ? "pdf" : file.mimeType === "image/png" ? "png" : "jpg";
+        const path = `${uid}/${Date.now()}.${ext}`;
+        // En web el picker entrega el File; en Android/iOS se lee desde la URI local.
+        const body = Platform.OS === "web" && file.file ? file.file : await (await fetch(file.uri)).arrayBuffer();
+        const up = await c.storage.from("verificaciones").upload(path, body, { contentType: file.mimeType, upsert: false });
+        if (up.error) return { message: up.error.message };
+        const ins = await c.from("verification_requests").insert({
+          business_id: uid,
+          file_path: path,
+          mime_type: file.mimeType,
+          size_bytes: file.size,
+        });
+        if (ins.error) {
+          // Si la solicitud no procede (p. ej. aún no pasan 7 días), no se deja el archivo en el bucket.
+          await c.storage.from("verificaciones").remove([path]);
+          return ins.error;
+        }
+        return null;
+      }),
+    [mutate]
+  );
+
+  const requestStudentEmailCode = useCallback<AppActions["requestStudentEmailCode"]>(
+    (email) =>
+      mutate("estudiante", "No pudimos enviar el código. Inténtalo de nuevo.", async (c) =>
+        (await c.rpc("request_student_email_code", { p_email: email })).error
+      ),
+    [mutate]
+  );
+
+  const verifyStudentEmailCode = useCallback<AppActions["verifyStudentEmailCode"]>(
+    async (code) => {
+      let correct = true;
+      const result = await mutate("estudiante", "No pudimos comprobar el código. Inténtalo de nuevo.", async (c) => {
+        const r = await c.rpc("verify_student_email_code", { p_code: code });
+        correct = r.data === true;
+        return r.error;
+      });
+      if (result.error) return result;
+      if (!correct) {
+        const left = stateRef.current.studentCodeStatus?.attemptsLeft;
+        return fail(left ? `Código incorrecto. Te quedan ${left} ${left === 1 ? "intento" : "intentos"}.` : "Código incorrecto. Pide uno nuevo.");
+      }
+      return {};
+    },
+    [mutate, fail]
+  );
+
+  const adminResolveVerification = useCallback<AppActions["adminResolveVerification"]>(
+    async (requestId, approve, reason) => {
+      let filePath: string | null = null;
+      const result = await mutate("admin", "No pudimos resolver la solicitud.", async (c) => {
+        const r = await c.rpc("admin_resolve_verification", { p_request_id: requestId, p_approve: approve, p_reason: reason });
+        filePath = (r.data as string | null) ?? null;
+        return r.error;
+      });
+      if (result.error || !filePath || !supabase) return result;
+      // La solicitud ya quedó resuelta; ahora se borra el comprobante del bucket.
+      const del = await supabase.storage.from("verificaciones").remove([filePath]);
+      if (del.error) return fail("La solicitud quedó resuelta, pero no pudimos borrar el comprobante. Bórralo en Storage → verificaciones.");
+      return {};
+    },
+    [mutate, fail]
+  );
+
+  const adminVerificationDocumentUrl = useCallback<AppActions["adminVerificationDocumentUrl"]>(
+    async (filePath) => {
+      if (!supabase) return fail(MISSING_CONFIG);
+      if (stateRef.current.session?.role !== "admin") return fail(INVALID_SESSION);
+      const { data, error } = await supabase.storage.from("verificaciones").createSignedUrl(filePath, 60);
+      if (error || !data) return fail("No pudimos abrir el comprobante.");
+      return { url: data.signedUrl };
+    },
+    [fail]
+  );
+
   // ───────── Administración ─────────
 
   const adminUpdateReport = useCallback<AppActions["adminUpdateReport"]>(
@@ -942,6 +1083,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       adminSetVacancyStatus,
       adminPauseOffer,
       adminRevokeVerification,
+      requestBusinessVerification,
+      requestStudentEmailCode,
+      verifyStudentEmailCode,
+      adminResolveVerification,
+      adminVerificationDocumentUrl,
     }),
     [
       state,
@@ -982,6 +1128,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       adminSetVacancyStatus,
       adminPauseOffer,
       adminRevokeVerification,
+      requestBusinessVerification,
+      requestStudentEmailCode,
+      verifyStudentEmailCode,
+      adminResolveVerification,
+      adminVerificationDocumentUrl,
     ]
   );
 
@@ -996,19 +1147,21 @@ export function useApp(): AppContextValue {
 
 /** Datos del estudiante autenticado. Solo expone su propia información. */
 export function useCurrentStudent() {
-  const { session, students, availability, applications, notifications, savedVacancies, interviews } = useApp();
+  const { session, students, availability, applications, notifications, savedVacancies, interviews, studentCodeStatus } = useApp();
   const id = session?.role === "estudiante" ? session.userId : null;
   return useMemo(
     () => ({
       /** Propuestas de entrevista de sus propias postulaciones. */
       interviews: interviews.filter((p) => applications.some((a) => a.id === p.applicationId && a.studentId === id)),
       savedVacancyIds: new Set(savedVacancies.filter((x) => x.studentId === id).map((x) => x.vacancyId)),
+      /** Código de verificación pendiente (sin datos del correo). */
+      codeStatus: id ? studentCodeStatus : null,
       profile: students.find((s) => s.id === id) ?? null,
       blocks: (id && availability[id]) || [],
       applications: applications.filter((a) => a.studentId === id),
       notifications: notifications.filter((n) => n.userId === id),
     }),
-    [id, students, availability, applications, notifications, savedVacancies, interviews]
+    [id, students, availability, applications, notifications, savedVacancies, interviews, studentCodeStatus]
   );
 }
 
@@ -1017,7 +1170,7 @@ export function useCurrentStudent() {
  * vacantes, tienen un servicio activo o recibieron una solicitud suya (visible_public_students).
  */
 export function useCurrentBusiness() {
-  const { session, businesses, vacancies, applications, students, notifications, interviews, applicationInsights } = useApp();
+  const { session, businesses, vacancies, applications, students, notifications, interviews, applicationInsights, verificationRequests } = useApp();
   const id = session?.role === "negocio" ? session.userId : null;
   return useMemo(() => {
     const myVacancies = vacancies.filter((v) => v.businessId === id);
@@ -1034,20 +1187,23 @@ export function useCurrentBusiness() {
       notifications: notifications.filter((n) => n.userId === id),
       /** Propuestas de entrevista de las postulaciones a sus vacantes. */
       interviews: interviews.filter((p) => received.some((a) => a.id === p.applicationId)),
+      /** Sus solicitudes de verificación, la más reciente primero. */
+      verificationRequests: id ? verificationRequests.filter((r) => r.businessId === id) : [],
     };
-  }, [id, businesses, vacancies, applications, students, notifications, interviews, applicationInsights]);
+  }, [id, businesses, vacancies, applications, students, notifications, interviews, applicationInsights, verificationRequests]);
 }
 
 /** Datos del panel de administración. Vacío si la sesión no es de administración. */
 export function useAdmin() {
-  const { session, adminReports, adminActions } = useApp();
+  const { session, adminReports, adminActions, adminVerifications } = useApp();
   const isAdmin = session?.role === "admin";
   return useMemo(
     () => ({
       isAdmin,
       reports: isAdmin ? adminReports : [],
       actions: isAdmin ? adminActions : [],
+      verifications: isAdmin ? adminVerifications : [],
     }),
-    [isAdmin, adminReports, adminActions]
+    [isAdmin, adminReports, adminActions, adminVerifications]
   );
 }

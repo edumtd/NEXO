@@ -1,18 +1,18 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { router } from "expo-router";
-import { BadgeCheck, LogOut, Mail, MapPin, Phone, Save, ShieldAlert, Store } from "lucide-react-native";
+import { LogOut, Mail, MapPin, Phone, Save, Store } from "lucide-react-native";
 import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Text, View } from "react-native";
 
 import { BusinessIcon } from "@/components/BusinessIcon";
 import { BusinessLocationPicker } from "@/components/BusinessLocationPicker";
+import { BusinessVerification } from "@/components/BusinessVerification";
 import { Screen, SectionTitle } from "@/components/Screen";
 import { Button, Chip, Input } from "@/components/ui";
 import { CATEGORY_LABELS, ZONES } from "@/lib/constants";
 import { businessProfileSchema, type BusinessProfileValues } from "@/lib/schemas";
 import { useApp, useCurrentBusiness } from "@/store/AppStore";
-import { colors } from "@/theme/colors";
 import type { BusinessCategory } from "@/types";
 
 export default function PerfilNegocio() {
@@ -64,25 +64,7 @@ export default function PerfilNegocio() {
         </View>
       }
     >
-      <View
-        className={`flex-row items-start gap-3 rounded-3xl p-4 ${profile.verified ? "bg-turquoise-50" : "bg-amber-50"}`}
-      >
-        {profile.verified ? (
-          <BadgeCheck size={20} color={colors.turquoise600} />
-        ) : (
-          <ShieldAlert size={20} color={colors.amber} />
-        )}
-        <View className="flex-1">
-          <Text className={`text-sm font-bold ${profile.verified ? "text-turquoise-700" : "text-amber-700"}`}>
-            {profile.verified ? "Verificación básica completada" : "Verificación básica pendiente"}
-          </Text>
-          <Text className={`text-sm leading-5 ${profile.verified ? "text-turquoise-700" : "text-amber-700"}`}>
-            {profile.verified
-              ? "Los estudiantes verán la insignia en tus vacantes."
-              : "Completa todos los datos de contacto y ubicación. El proceso de verificación se habilitará en una próxima versión."}
-          </Text>
-        </View>
-      </View>
+      <BusinessVerification />
 
       <SectionTitle title="Ubicación en el mapa" />
       <BusinessLocationPicker profile={profile} />

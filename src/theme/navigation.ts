@@ -1,5 +1,6 @@
 import type { Href, Tabs } from "expo-router";
 import {
+  BadgeCheck,
   Bell,
   Briefcase,
   CalendarClock,
@@ -113,6 +114,7 @@ export const HIDDEN_TAB_OPTIONS = {
 /** Panel de administración: solo web ancha. No forma parte de la navegación de estudiantes ni negocios. */
 export const ADMIN_LINKS: NavLink[] = [
   { name: "reportes", href: "/admin/reportes", label: "Reportes", icon: Flag, inTabBar: false, match: ["/admin/reporte/"] },
+  { name: "verificaciones", href: "/admin/verificaciones", label: "Verificaciones", icon: BadgeCheck, inTabBar: false, match: ["/admin/verificacion/"] },
   { name: "bitacora", href: "/admin/bitacora", label: "Bitácora", icon: ScrollText, inTabBar: false },
 ];
 

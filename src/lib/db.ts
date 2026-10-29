@@ -4,6 +4,7 @@ import type {
   AcademicStatus,
   AdminAction,
   AdminReport,
+  AdminVerificationRequest,
   AppNotification,
   Application,
   AvailabilityBlock,
@@ -19,6 +20,7 @@ import type {
   ServiceUpdate,
   StudentProfile,
   Vacancy,
+  VerificationRequest,
 } from "@/types";
 
 export interface StudentRow {
@@ -34,6 +36,8 @@ export interface StudentRow {
   max_weekly_hours: number | null;
   period_end_date: string | null;
   alerts_enabled: boolean;
+  /** Existe desde la migración 005. */
+  student_verified_at?: string | null;
 }
 
 export interface BusinessRow {
@@ -71,6 +75,7 @@ export function studentFromRow(row: StudentRow, email: string): StudentProfile {
     maxWeeklyHours: row.max_weekly_hours ?? undefined,
     periodEndDate: row.period_end_date ?? undefined,
     alertsEnabled: row.alerts_enabled,
+    studentVerified: !!row.student_verified_at,
   };
 }
 
@@ -368,6 +373,8 @@ export interface PublicStudentRow {
   zone: string;
   skills: string[];
   academic_status: AcademicStatus;
+  /** Existe desde la migración 005. */
+  student_verified?: boolean;
 }
 
 /** Lo convierte a StudentProfile con campos privados vacíos; el correo solo llega si está permitido. */
@@ -384,6 +391,7 @@ export function publicStudentFromRow(r: PublicStudentRow, email = ""): StudentPr
     availabilityPeriod: "",
     academicStatus: r.academic_status,
     alertsEnabled: false,
+    studentVerified: !!r.student_verified,
   };
 }
 
@@ -482,12 +490,81 @@ export function adminActionFromRow(r: AdminActionRow): AdminAction {
   };
 }
 
+// ───────── Verificación ─────────
+
+export interface VerificationRequestRow {
+  id: string;
+  business_id: string;
+  status: VerificationRequest["status"];
+  mime_type: VerificationRequest["mimeType"];
+  size_bytes: number;
+  reject_reason: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+}
+
+export function verificationRequestFromRow(r: VerificationRequestRow): VerificationRequest {
+  return {
+    id: r.id,
+    businessId: r.business_id,
+    status: r.status,
+    mimeType: r.mime_type,
+    sizeBytes: r.size_bytes,
+    rejectReason: r.reject_reason ?? undefined,
+    reviewedAt: r.reviewed_at ?? undefined,
+    createdAt: r.created_at,
+  };
+}
+
+/** Columnas que el negocio puede leer de sus solicitudes (no la ruta ni quién revisó). */
+export const VERIFICATION_REQUEST_COLUMNS = "id, business_id, status, mime_type, size_bytes, reject_reason, reviewed_at, created_at";
+
+export interface AdminVerificationRow extends VerificationRequestRow {
+  file_path: string | null;
+  business_name: string;
+  business_address: string;
+  business_zone: string;
+  business_phone: string;
+  business_verified: boolean;
+}
+
+export function adminVerificationFromRow(r: AdminVerificationRow): AdminVerificationRequest {
+  return {
+    ...verificationRequestFromRow(r),
+    filePath: r.file_path ?? undefined,
+    businessName: r.business_name,
+    businessAddress: r.business_address,
+    businessZone: r.business_zone,
+    businessPhone: r.business_phone,
+    businessVerified: r.business_verified,
+  };
+}
+
+/** Mensajes de las funciones del servidor que ya están en español y se muestran tal cual. */
+const SERVER_MESSAGES = [
+  "ya está verificad",
+  "podrás volver a solicitar",
+  "carpeta del negocio",
+  "ya fue resuelta",
+  "usa el correo",
+  "aún no está configurado",
+  "ya verificó otra cuenta",
+  "ya pediste 3 códigos",
+  "primero pide un código",
+  "el código expiró",
+  "demasiados intentos",
+  "solo estudiantes pueden",
+];
+
 /** Mensaje en español para errores de la base de datos (RLS, validaciones, red). */
 export function dbErrorMessage(error: { message?: string; code?: string } | null | undefined, fallback: string): string {
   const m = (error?.message ?? "").toLowerCase();
   if (error?.code === "23505") return "Ese registro ya existe.";
   if (error?.code === "42501" || m.includes("row-level security")) return "No tienes permiso para hacer esto.";
   if (m.includes("network") || m.includes("fetch")) return "No hay conexión con el servidor. Revisa tu internet.";
+  if (error?.message && SERVER_MESSAGES.some((s) => m.includes(s))) return error.message;
+  if (m.includes("exceeded the maximum allowed size") || m.includes("payload too large")) return "El archivo supera los 5 MB.";
+  if (m.includes("mime type") && m.includes("not supported")) return "Sube un PDF, JPG o PNG.";
   if (m.includes("ya está cerrada")) return "Esta postulación ya está cerrada.";
   if (m.includes("solo administración")) return "Solo administración puede hacer esto.";
   if (m.includes("al menos 10 caracteres")) return "El motivo debe tener al menos 10 caracteres.";

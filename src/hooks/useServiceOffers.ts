@@ -18,6 +18,7 @@ export function toPublicStudent(s: StudentProfile): PublicStudent {
     zone: s.zone,
     skills: s.skills,
     academicStatus: s.academicStatus,
+    studentVerified: s.studentVerified,
   };
 }
 

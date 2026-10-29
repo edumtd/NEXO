@@ -1,10 +1,11 @@
-import { CircleCheck, CircleDashed, CircleSlash, GraduationCap } from "lucide-react-native";
+import { BadgeCheck, CircleCheck, CircleDashed, CircleSlash, GraduationCap } from "lucide-react-native";
 
 import { Badge, type BadgeTone } from "@/components/ui";
 import {
   ACADEMIC_STATUS_LABELS,
   APPLICATION_STATUS_LABELS,
   REPORT_STATUS_LABELS,
+  VERIFICATION_STATUS_LABELS,
   SERVICE_OFFER_STATUS_LABELS,
   SERVICE_REQUEST_STATUS_LABELS,
   VACANCY_STATUS_LABELS,
@@ -17,6 +18,7 @@ import type {
   ServiceOfferStatus,
   ServiceRequestStatus,
   VacancyStatus,
+  VerificationStatus,
 } from "@/types";
 
 export function AcademicStatusBadge({ status }: { status: AcademicStatus }) {
@@ -102,4 +104,20 @@ const reportTone: Record<ReportStatus, BadgeTone> = {
 /** Estado de un reporte (solo en el panel de administración). */
 export function ReportStatusBadge({ status }: { status: ReportStatus }) {
   return <Badge label={REPORT_STATUS_LABELS[status]} tone={reportTone[status]} />;
+}
+
+/** Insignia que el negocio ve cuando el estudiante verificó su correo institucional (nada más del correo). */
+export function StudentVerifiedBadge({ verified }: { verified: boolean }) {
+  return verified ? <Badge label="Estudiante verificado" tone="success" icon={BadgeCheck} /> : null;
+}
+
+const verificationTone: Record<VerificationStatus, BadgeTone> = {
+  en_revision: "warning",
+  verificado: "success",
+  rechazado: "danger",
+};
+
+/** Estado de una solicitud de verificación de negocio. */
+export function VerificationStatusBadge({ status }: { status: VerificationStatus }) {
+  return <Badge label={VERIFICATION_STATUS_LABELS[status]} tone={verificationTone[status]} />;
 }

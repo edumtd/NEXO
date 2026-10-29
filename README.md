@@ -11,12 +11,13 @@ Su diferenciador es la **compatibilidad real** entre los bloques libres del estu
 
 ## Stack
 
-Expo SDK 58 (React Native 0.88) · TypeScript · Expo Router · NativeWind 4 (Tailwind 3) · React Hook Form + Zod · Lucide · Supabase (Auth, Postgres con RLS) · react-native-maps y Google Maps JS · expo-location
+Expo SDK 58 (React Native 0.88) · TypeScript · Expo Router · NativeWind 4 (Tailwind 3) · React Hook Form + Zod · Lucide · Supabase (Auth, Postgres con RLS, Storage, Vault, pg_net) · Brevo (correo de verificación) · react-native-maps y Google Maps JS · expo-location · expo-document-picker
 
 ## Funciones
 
 ### Estudiante
 - Registro como estudiante activo o egresado; perfil con carrera, zona y habilidades.
+- **Verificación opcional** con un código enviado al correo institucional; el negocio ve la insignia "Estudiante verificado" (NEXO no guarda ese correo).
 - **Disponibilidad semanal** por bloques, periodo académico y fecha de fin (recordatorio para actualizarla).
 - **Buscar vacantes** en lista o **mapa**: búsqueda sin acentos, filtros (zona, giro, horario, tipo de empleo, fecha de inicio, sueldo mínimo, solo compatibles, negocios verificados) y orden (recientes, mejor pagadas, más compatibles, más cercanas). Los filtros se recuerdan.
 - **Límite de horas semanales** y vista **Mi semana** con sus compromisos.
@@ -26,6 +27,7 @@ Expo SDK 58 (React Native 0.88) · TypeScript · Expo Router · NativeWind 4 (Ta
 
 ### Negocio
 - Perfil con ubicación en el mapa; publicar, editar, pausar y cerrar vacantes.
+- **Verificación básica** subiendo un comprobante de domicilio, revisado por administración.
 - **Postulantes** ordenados por compatibilidad (calculada en el servidor) y propuesta de entrevistas.
 - **Talento:** buscar servicios con filtros y orden por tarifa, enviar solicitudes y confirmar entregas.
 
@@ -36,6 +38,7 @@ Expo SDK 58 (React Native 0.88) · TypeScript · Expo Router · NativeWind 4 (Ta
 
 ### Administración (solo web)
 - Bandeja de reportes con estado y nota interna, acciones de moderación (pausar o cerrar vacantes, pausar servicios, retirar verificación) y bitácora de acciones.
+- Revisión de comprobantes de domicilio para verificar negocios.
 - Los administradores no se crean desde la app: se dan de alta solo desde el SQL Editor de Supabase (ver [docs/SUPABASE.md](docs/SUPABASE.md)).
 
 ## Ejecutar localmente
@@ -80,6 +83,7 @@ Si cambias `tailwind.config.js`, reinicia con caché limpia: `npx expo start --c
 | `002_perfil_estudiante_privado.sql` | El negocio solo recibe el perfil público del estudiante |
 | `003_etapa_4.sql` | Evita el aviso duplicado al proponer una entrevista |
 | `004_panel_admin.sql` | Panel de administración: administradores, estado de reportes y bitácora |
+| `005_verificacion.sql` | Verificación de negocios y de estudiantes |
 
 La guía completa (crear el proyecto, autenticación, recuperar contraseña, administradores) está en [docs/SUPABASE.md](docs/SUPABASE.md).
 
@@ -151,9 +155,9 @@ Superar el límite de horas semanales del estudiante se muestra como un aviso ap
 | Cuentas | Recuperar contraseña | ✅ |
 | Búsqueda | Orden, filtros nuevos y búsqueda sin acentos | ✅ |
 | Administración | Panel de reportes, moderación y bitácora | ✅ |
+| Fase D | Verificación de negocios (comprobante) y estudiantes (correo institucional) | ✅ |
 
 ### Próximos pasos
-- **Fase D:** verificación de negocios con comprobante (y, por definir, de estudiantes).
 - Cierre automático de vacantes cubiertas o inactivas.
 - Notificaciones en tiempo real y notificaciones push.
 - Aviso de privacidad, eliminación de cuenta y servicio de correo propio antes de publicar.

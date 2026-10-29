@@ -25,6 +25,7 @@ Si tu proyecto ya tenía `schema.sql`, ejecuta cada archivo de `supabase/migraci
 | `002_perfil_estudiante_privado.sql` | Quita la lectura directa del perfil completo del estudiante por el negocio; solo recibe el perfil público |
 | `003_etapa_4.sql` | Evita el aviso duplicado al proponer una entrevista (las tablas de la Etapa 4 ya venían en `schema.sql`) |
 | `004_panel_admin.sql` | Panel de administración: tabla `admins`, `is_admin()`, estado de los reportes, bitácora `admin_actions` y funciones de moderación |
+| `005_verificacion.sql` | Verificación de negocios (comprobante en Storage privado) y de estudiantes (código al correo institucional). Requiere los pasos de "Verificación" |
 
 En una instalación nueva no hace falta: `schema.sql` ya incluye todas las migraciones.
 
@@ -101,6 +102,40 @@ No existe un rol "admin" en el registro: nadie puede volverse administrador desd
 - **Quitar el acceso:** `delete from admins where user_id = (select id from auth.users where email = …);`. La cuenta queda sin perfil y ya no puede entrar; bórrala en **Authentication → Users** si no se usará.
 - Una cuenta de administración no puede ser también estudiante o negocio: usa otro correo para eso.
 - Suspender cuentas no está en el panel: se hace en **Authentication → Users → Ban user**.
+
+## Verificación
+
+Requiere la migración 005. Activa las extensiones `pg_net` y `pgcrypto`; si el SQL Editor no lo permite, actívalas en **Database → Extensions** y vuelve a ejecutarla.
+
+### Negocios (comprobante de domicilio)
+
+No necesita configuración extra: la migración crea el bucket privado `verificaciones` (PDF, JPG o PNG de hasta 5 MB).
+
+- El negocio sube el comprobante desde su perfil. Solo administración lo puede ver, desde **Panel → Verificaciones**, con un enlace que dura 60 segundos.
+- Al aprobar o rechazar, el archivo se borra del bucket. Tras un rechazo, el negocio puede volver a intentarlo en 7 días.
+- Si alguna vez el panel avisa que no pudo borrar el archivo, bórralo a mano en **Storage → verificaciones**.
+
+### Estudiantes (código al correo institucional)
+
+El código se envía desde la base de datos (`pg_net`) con la API de **Brevo** (plan gratuito: 300 correos al día). El correo de Supabase no sirve, porque solo envía a los miembros del proyecto.
+
+1. Crea una cuenta en <https://www.brevo.com>.
+2. En **Senders, Domains & Dedicated IPs → Senders**, agrega el correo remitente (por ejemplo tu Gmail) y confírmalo desde el correo que te llega.
+3. En **SMTP & API → API Keys**, genera una clave.
+4. En el SQL Editor, guarda la clave y el remitente en el Vault (nunca en `.env` ni en el código):
+   ```sql
+   select vault.create_secret(TU_API_KEY_DE_BREVO, brevo_api_key);
+   select vault.create_secret(tu-remitente@gmail.com, brevo_sender_email);
+   ```
+   Para cambiarlas después: `select vault.update_secret((select id from vault.secrets where name = brevo_api_key), NUEVA_CLAVE);`
+5. Dominios institucionales aceptados:
+   - Cualquier correo que termine en **`.edu.mx`** se acepta sin configurar nada.
+   - Agrega otros dominios en la tabla `student_email_domains`. Cada dominio acepta también sus subdominios:
+     ```sql
+     insert into student_email_domains (domain) values (alumno.buap.mx);
+     ```
+
+Qué se guarda: solo **que el estudiante se verificó y cuándo**, más una huella irreversible del correo (para que el mismo correo no verifique dos cuentas). El código vale 10 minutos, con 5 intentos y 3 envíos por hora. Con un remitente de Gmail, los primeros correos pueden llegar a spam; para usuarios reales conviene un dominio propio verificado en Brevo.
 
 ## Cargar datos a mano
 

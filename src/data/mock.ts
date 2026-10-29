@@ -34,6 +34,7 @@ export const mockStudents: StudentProfile[] = [
     availabilityPeriod: "Otoño 2026",
     academicStatus: "activo",
     alertsEnabled: false,
+    studentVerified: false,
   },
   {
     id: "stu-2",
@@ -48,6 +49,7 @@ export const mockStudents: StudentProfile[] = [
     availabilityPeriod: "Otoño 2026",
     academicStatus: "activo",
     alertsEnabled: false,
+    studentVerified: false,
   },
   {
     id: "stu-3",
@@ -61,6 +63,7 @@ export const mockStudents: StudentProfile[] = [
     availabilityPeriod: "Otoño 2026",
     academicStatus: "egresado",
     alertsEnabled: false,
+    studentVerified: false,
   },
   {
     id: "stu-4",
@@ -74,6 +77,7 @@ export const mockStudents: StudentProfile[] = [
     availabilityPeriod: "Otoño 2026",
     academicStatus: "activo",
     alertsEnabled: false,
+    studentVerified: false,
   },
   {
     id: "stu-5",
@@ -87,6 +91,7 @@ export const mockStudents: StudentProfile[] = [
     availabilityPeriod: "Otoño 2026",
     academicStatus: "egresado",
     alertsEnabled: false,
+    studentVerified: false,
   },
 ];
 

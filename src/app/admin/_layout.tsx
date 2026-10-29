@@ -15,7 +15,7 @@ import { ADMIN_LINKS, useIsWideWeb } from "@/theme/navigation";
  */
 export default function AdminLayout() {
   const { session, authReady, logout } = useApp();
-  const { reports } = useAdmin();
+  const { reports, verifications } = useAdmin();
   const wide = useIsWideWeb();
 
   if (!authReady) return <LoadingState message="Cargando tu sesión…" />;
@@ -46,7 +46,7 @@ export default function AdminLayout() {
   const pending = reports.filter((r) => r.status === "nuevo").length;
   return (
     <View className="flex-1 flex-row bg-surface">
-      <SideNav links={ADMIN_LINKS} title="Administración" subtitle="Panel de NEXO" counts={{ reportes: pending }} />
+      <SideNav links={ADMIN_LINKS} title="Administración" subtitle="Panel de NEXO" counts={{ reportes: pending, verificaciones: verifications.filter((v) => v.status === "en_revision").length }} />
       <View className="flex-1">
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.surface } }} />
       </View>
